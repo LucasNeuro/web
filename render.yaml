@@ -4,7 +4,7 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npx puppeteer browsers install chrome
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -18,9 +18,11 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: true
+        value: false
       - key: PUPPETEER_EXECUTABLE_PATH
         value: /usr/bin/google-chrome-stable
+      - key: PUPPETEER_ARGS
+        value: --no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-accelerated-2d-canvas,--no-first-run,--no-zygote,--disable-gpu
       - key: NODE_OPTIONS
         value: --max-old-space-size=256
     autoDeploy: true

@@ -16,7 +16,10 @@ class ScraperEstruturaReal {
   async iniciarBrowser() {
     if (!this.browser) {
       console.log('[BROWSER] Iniciando navegador headless...');
-      this.browser = await puppeteer.launch({
+      
+      // Configuração para Render
+      const isProduction = process.env.NODE_ENV === 'production';
+      const launchOptions = {
         headless: 'new',
         args: [
           '--no-sandbox',
@@ -29,11 +32,37 @@ class ScraperEstruturaReal {
           '--disable-web-security',
           '--disable-features=VizDisplayCompositor',
           '--memory-pressure-off',
-          '--max_old_space_size=256'
+          '--max_old_space_size=256',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
         ]
-      });
-      console.log('[BROWSER] Navegador iniciado com sucesso');
-      this.startIdleTimer();
+      };
+
+      // Se estiver em produção (Render), usar Chrome do sistema
+      if (isProduction) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+        console.log('[BROWSER] Usando Chrome do sistema:', launchOptions.executablePath);
+      }
+
+      try {
+        this.browser = await puppeteer.launch(launchOptions);
+        console.log('[BROWSER] Navegador iniciado com sucesso');
+        this.startIdleTimer();
+      } catch (error) {
+        console.error('[BROWSER] Erro ao iniciar navegador:', error.message);
+        
+        // Fallback: tentar sem executablePath
+        if (isProduction) {
+          console.log('[BROWSER] Tentando fallback sem executablePath...');
+          delete launchOptions.executablePath;
+          this.browser = await puppeteer.launch(launchOptions);
+          console.log('[BROWSER] Navegador iniciado com fallback');
+          this.startIdleTimer();
+        } else {
+          throw error;
+        }
+      }
     }
     this.lastUsed = Date.now();
     return this.browser;
