@@ -1,4 +1,6 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const axios = require('axios');
+const cheerio = require('cheerio');
 const supabase = require('./config/supabase');
 
 class ScraperEstruturaReal {
@@ -39,44 +41,35 @@ class ScraperEstruturaReal {
         ]
       };
 
-      // Se estiver em produção (Render), tentar múltiplas opções de Chrome
+      // Se estiver em produção (Render), usar Chrome do sistema
       if (isProduction) {
-        const chromePaths = [
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/google-chrome',
-          '/usr/bin/chromium-browser',
-          '/usr/bin/chromium',
-          '/opt/google/chrome/chrome'
-        ];
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+        console.log('[BROWSER] Usando Chrome do sistema:', launchOptions.executablePath);
+      }
 
-        let chromeFound = false;
-        for (const chromePath of chromePaths) {
-          try {
-            launchOptions.executablePath = chromePath;
-            console.log('[BROWSER] Tentando Chrome em:', chromePath);
-            this.browser = await puppeteer.launch(launchOptions);
-            console.log('[BROWSER] Navegador iniciado com sucesso em:', chromePath);
-            chromeFound = true;
-            break;
-          } catch (error) {
-            console.log('[BROWSER] Chrome não encontrado em:', chromePath);
-            continue;
-          }
-        }
-
-        if (!chromeFound) {
-          console.log('[BROWSER] Tentando sem executablePath (Chrome bundled)...');
-          delete launchOptions.executablePath;
-          this.browser = await puppeteer.launch(launchOptions);
-          console.log('[BROWSER] Navegador iniciado com Chrome bundled');
-        }
-        
-        this.startIdleTimer();
-      } else {
-        // Desenvolvimento local
+      try {
         this.browser = await puppeteer.launch(launchOptions);
       console.log('[BROWSER] Navegador iniciado com sucesso');
         this.startIdleTimer();
+      } catch (error) {
+        console.error('[BROWSER] Erro ao iniciar navegador:', error.message);
+        
+        // Fallback: tentar sem executablePath
+        if (isProduction) {
+          console.log('[BROWSER] Tentando fallback sem executablePath...');
+          try {
+            delete launchOptions.executablePath;
+            this.browser = await puppeteer.launch(launchOptions);
+            console.log('[BROWSER] Navegador iniciado com fallback');
+            this.startIdleTimer();
+          } catch (fallbackError) {
+            console.error('[BROWSER] Fallback também falhou:', fallbackError.message);
+            console.log('[BROWSER] Usando modo HTTP/Cheerio como último recurso');
+            this.browser = 'HTTP_MODE'; // Marca para usar HTTP
+          }
+        } else {
+          throw error;
+        }
       }
     }
     this.lastUsed = Date.now();
@@ -128,7 +121,15 @@ class ScraperEstruturaReal {
     const inicioExtracao = Date.now();
     console.log(`\n[SCRAPER ESTRUTURA REAL] Processando: ${url}`);
     
+    try {
     const browser = await this.iniciarBrowser();
+      
+      // Se o browser falhou, usar modo HTTP
+      if (browser === 'HTTP_MODE') {
+        console.log('[SCRAPER ESTRUTURA REAL] Usando modo HTTP/Cheerio');
+        return await this.extrairComHTTP(url, inicioExtracao);
+      }
+      
     const page = await browser.newPage();
     
     try {
@@ -183,9 +184,69 @@ class ScraperEstruturaReal {
       
     } catch (error) {
       console.error(`  [ERRO] ${error.message}`);
-      await page.close();
-      throw error;
+      if (page) await page.close();
+      
+      // Se Puppeteer falhar, tentar HTTP como fallback
+      console.log('[SCRAPER ESTRUTURA REAL] Tentando fallback HTTP...');
+      try {
+        return await this.extrairComHTTP(url, inicioExtracao);
+      } catch (httpError) {
+        console.error(`[SCRAPER ESTRUTURA REAL] ✗ Fallback HTTP também falhou: ${httpError.message}`);
+        throw error; // Re-throw o erro original
+      }
     }
+  }
+
+  async extrairComHTTP(url, startTime) {
+    console.log('[HTTP] Fazendo requisição HTTP...');
+    
+    const response = await axios.get(url, {
+      timeout: this.timeoutPagina,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+      }
+    });
+
+    const $ = cheerio.load(response.data);
+    const tempoTotal = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    // Extrair ID PNCP da URL
+    const matchUrl = url.match(/editais\/(\d+)\/(\d+)\/(\d+)/);
+    
+    // Extrair dados básicos com Cheerio
+    const dados = {
+      url_edital: url,
+      titulo_edital: $('h1').first().text().trim() || 'Título não encontrado',
+      orgao: $('*:contains("Órgão")').first().text().replace('Órgão:', '').trim() || 'Órgão não encontrado',
+      modalidade: $('*:contains("Modalidade")').first().text().replace('Modalidade:', '').trim() || '',
+      situacao: $('*:contains("Situação")').first().text().replace('Situação:', '').trim() || '',
+      objeto: $('*:contains("Objeto")').first().text().replace('Objeto:', '').trim() || '',
+      itens: [],
+      anexos: [],
+      historico: [],
+      objeto_completo: {},
+      dados_financeiros: {}
+    };
+
+    if (matchUrl) {
+      dados.id_pncp = `${matchUrl[1]}-${matchUrl[2]}-${matchUrl[3]}`;
+      dados.cnpj_orgao = matchUrl[1];
+      dados.ano = parseInt(matchUrl[2]);
+      dados.numero = parseInt(matchUrl[3]);
+    }
+
+    console.log(`[HTTP] ✓ Extração HTTP concluída em ${tempoTotal}s`);
+    return {
+      ...dados,
+      tempo_extracao: parseFloat(tempoTotal),
+      metodo_extracao: 'http_cheerio',
+      data_extracao: new Date().toISOString()
+    };
   }
 
   async extrairDadosBasicos(page, url) {
