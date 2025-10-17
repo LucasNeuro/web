@@ -49,7 +49,7 @@ class ScraperEstruturaReal {
 
       try {
         this.browser = await puppeteer.launch(launchOptions);
-        console.log('[BROWSER] Navegador iniciado com sucesso');
+      console.log('[BROWSER] Navegador iniciado com sucesso');
         this.startIdleTimer();
       } catch (error) {
         console.error('[BROWSER] Erro ao iniciar navegador:', error.message);
@@ -107,7 +107,7 @@ class ScraperEstruturaReal {
     console.log(`\n[SCRAPER ESTRUTURA REAL] Processando: ${url}`);
     
     try {
-    const browser = await this.iniciarBrowser();
+      const browser = await this.iniciarBrowser();
       
       // Se o browser falhou, usar modo HTTP
       if (browser === 'HTTP_MODE') {
@@ -115,9 +115,7 @@ class ScraperEstruturaReal {
         return await this.extrairComHTTP(url, inicioExtracao);
       }
       
-    const page = await browser.newPage();
-    
-    try {
+      const page = await browser.newPage();
       // Configurar página
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       await page.setViewport({ width: 1920, height: 1080 });
