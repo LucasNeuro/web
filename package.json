@@ -9,7 +9,8 @@
     "extrair": "node src/extrair.js",
     "teste": "node src/teste.js",
     "teste-simples": "node src/teste-simples.js",
-    "teste-scheduler": "node src/teste-scheduler.js"
+    "teste-scheduler": "node src/teste-scheduler.js",
+    "teste-url": "node src/teste-url-especifica.js"
   },
   "keywords": [
     "pncp",

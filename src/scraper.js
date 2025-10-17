@@ -3,9 +3,14 @@ const supabase = require('./config/supabase');
 
 class ScraperEstruturaReal {
   constructor() {
-    this.timeoutPagina = 120000;
+    this.timeoutPagina = 60000; // Reduzido para Render
     this.delayEntreCliques = 2000;
     this.browser = null;
+    this.pagePool = [];
+    this.maxPages = 1; // Reduzido para Render
+    this.browserIdleTimeout = 300000;
+    this.lastUsed = Date.now();
+    this.idleTimer = null;
   }
 
   async iniciarBrowser() {
@@ -20,19 +25,58 @@ class ScraperEstruturaReal {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--memory-pressure-off',
+          '--max_old_space_size=256'
         ]
       });
       console.log('[BROWSER] Navegador iniciado com sucesso');
+      this.startIdleTimer();
     }
+    this.lastUsed = Date.now();
     return this.browser;
   }
 
+  startIdleTimer() {
+    if (this.idleTimer) {
+      clearInterval(this.idleTimer);
+    }
+    
+    this.idleTimer = setInterval(() => {
+      const idleTime = Date.now() - this.lastUsed;
+      if (idleTime > this.browserIdleTimeout) {
+        console.log('[BROWSER] Fechando browser apos 5min idle');
+        this.fecharBrowser();
+      }
+    }, 60000);
+  }
+
   async fecharBrowser() {
+    if (this.idleTimer) {
+      clearInterval(this.idleTimer);
+      this.idleTimer = null;
+    }
+
     if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      console.log('[BROWSER] Navegador fechado');
+      try {
+        for (const page of this.pagePool) {
+          try {
+            await page.close();
+          } catch (err) {
+            // Ignora erro
+          }
+        }
+        this.pagePool = [];
+
+        await this.browser.close();
+        this.browser = null;
+        console.log('[BROWSER] Navegador fechado');
+      } catch (error) {
+        console.error('[BROWSER] Erro ao fechar navegador:', error.message);
+        this.browser = null;
+      }
     }
   }
 
@@ -125,13 +169,13 @@ class ScraperEstruturaReal {
             const chaveLimpa = chave.trim().toLowerCase();
             
             if (chaveLimpa.includes('local')) result.local = valor;
-            else if (chaveLimpa.includes('órgão') || chaveLimpa.includes('orgao')) result.orgao = valor;
+            else if (chaveLimpa === 'órgão' || chaveLimpa === 'orgao') result.orgao = valor;
             else if (chaveLimpa.includes('unidade compradora')) result.unidade_compradora = valor;
-            else if (chaveLimpa.includes('modalidade')) result.modalidade = valor;
+            else if (chaveLimpa === 'modalidade da contratação' || chaveLimpa === 'modalidade') result.modalidade = valor;
             else if (chaveLimpa.includes('amparo legal')) result.amparo_legal = valor;
             else if (chaveLimpa.includes('tipo')) result.tipo = valor;
             else if (chaveLimpa.includes('data de divulgação')) result.data_divulgacao = valor;
-            else if (chaveLimpa.includes('situação') || chaveLimpa.includes('situacao')) result.situacao = valor;
+            else if (chaveLimpa === 'situação' || chaveLimpa === 'situacao') result.situacao = valor;
             else if (chaveLimpa.includes('data de início')) result.data_inicio = valor;
             else if (chaveLimpa.includes('data fim')) result.data_fim = valor;
           }
@@ -149,6 +193,17 @@ class ScraperEstruturaReal {
     }
     
     dados.url_edital = url;
+    
+    // Limpar e formatar dados
+    if (dados.orgao) {
+      dados.orgao = dados.orgao.replace(/\n/g, ' ').replace(/\/\/.*$/g, '').trim();
+    }
+    if (dados.modalidade) {
+      dados.modalidade = dados.modalidade.replace(/\n/g, ' ').trim();
+    }
+    if (dados.situacao) {
+      dados.situacao = dados.situacao.replace(/\n/g, ' ').trim();
+    }
     
     return dados;
   }
@@ -320,43 +375,196 @@ class ScraperEstruturaReal {
       console.log('    ✓ Clicou na aba "Itens"');
     }
     
-    // Extrair itens da estrutura real da página
+    // Extrair itens da tabela real
     return await page.evaluate(() => {
       const items = [];
       
-      // Buscar elementos que podem conter itens
-      const elementos = document.querySelectorAll('div, p, span, li');
+      // Procurar por tabelas que contenham itens - método mais abrangente
+      const seletoresTabela = [
+        'table',
+        '[class*="table"]',
+        '[class*="grid"]',
+        '[class*="list"]',
+        '[class*="items"]',
+        'div[role="table"]',
+        'div[role="grid"]'
+      ];
       
-      elementos.forEach((el, index) => {
-        const texto = el.innerText?.trim();
+      let tabelaEncontrada = false;
+      
+      for (const seletor of seletoresTabela) {
+        const tabelas = document.querySelectorAll(seletor);
         
-        // Verificar se parece um item (texto longo com características de item)
-        if (texto && 
-            texto.length > 50 && 
-            !texto.includes('Portal Nacional') &&
-            !texto.includes('Buscar no') &&
-            !texto.includes('Planos de') &&
-            !texto.includes('Tabelas de') &&
-            !texto.includes('Catálogo') &&
-            (texto.includes('CONTRATAÇÃO') || 
-             texto.includes('AQUISIÇÃO') || 
-             texto.includes('SERVIÇOS') ||
-             texto.includes('FORNECIMENTO') ||
-             texto.includes('REFEIÇÃO') ||
-             texto.includes('ALMOÇO') ||
-             texto.includes('JANTAR'))) {
+        for (const tabela of tabelas) {
+          const linhas = tabela.querySelectorAll('tr, [class*="row"], div[class*="item"]');
           
+          if (linhas.length < 2) continue; // Precisa ter pelo menos cabeçalho + 1 linha
+          
+          // Verificar se é uma tabela de itens (deve ter cabeçalhos específicos)
+          const cabecalhos = Array.from(linhas[0]?.querySelectorAll('th, td, [class*="header"], div, span') || [])
+            .map(th => th.innerText?.toLowerCase().trim())
+            .join(' ');
+          
+          console.log('    🔍 Verificando tabela com cabeçalhos:', cabecalhos.substring(0, 100));
+          
+          if (cabecalhos.includes('número') || cabecalhos.includes('descrição') || 
+              cabecalhos.includes('quantidade') || cabecalhos.includes('valor') ||
+              cabecalhos.includes('item') || cabecalhos.includes('bateria') ||
+              cabecalhos.includes('lítio') || cabecalhos.includes('material')) {
+            
+            console.log('    ✓ Encontrou tabela de itens');
+            tabelaEncontrada = true;
+            
+            // Processar cada linha (pular cabeçalho)
+            for (let i = 1; i < linhas.length; i++) {
+              const linha = linhas[i];
+              const celulas = linha.querySelectorAll('td, [class*="cell"], div, span');
+              
+              if (celulas.length >= 3) {
+                const numero = celulas[0]?.innerText?.trim() || (i).toString();
+                const descricao = celulas[1]?.innerText?.trim() || '';
+                const quantidade = celulas[2]?.innerText?.trim() || null;
+                const valorUnitario = celulas[3]?.innerText?.trim() || null;
+                const valorTotal = celulas[4]?.innerText?.trim() || null;
+                
+                // Só adicionar se tem descrição válida
+                if (descricao && descricao.length > 0 && !descricao.includes('Portal Nacional')) {
+                  // Limpar descrição removendo números e valores que podem ter sido capturados junto
+                  let descricaoLimpa = descricao
+                    .replace(/^\d+\s*/, '') // Remove número no início
+                    .replace(/\s*\d+\s*$/, '') // Remove número no final
+                    .replace(/\s*R\$\s*[\d.,]+\s*/g, '') // Remove valores monetários
+                    .replace(/\s+/g, ' ') // Remove espaços múltiplos
+                    .trim();
+                  
+                  // Se a descrição ficou muito curta, usar a original
+                  if (descricaoLimpa.length < 5) {
+                    descricaoLimpa = descricao;
+                  }
+                  
+                  items.push({
+                    numero: parseInt(numero) || i,
+                    descricao: descricaoLimpa,
+                    quantidade: quantidade ? parseFloat(quantidade.replace(/[^\d,]/g, '').replace(',', '.')) : null,
+                    unidade: null,
+                    valor_unitario: valorUnitario ? valorUnitario.replace(/[^\d,]/g, '').replace(',', '.') : null,
+                    valor_total: valorTotal ? valorTotal.replace(/[^\d,]/g, '').replace(',', '.') : null
+                  });
+                }
+              }
+            }
+            break; // Usar apenas a primeira tabela de itens encontrada
+          }
+        }
+        
+        if (tabelaEncontrada) break;
+      }
+      
+      // Se não encontrou tabela, tentar extrair dados de elementos específicos
+      if (items.length === 0) {
+        console.log('    ⚠️ Tabela não encontrada, tentando extração por elementos...');
+        
+        // Procurar por elementos que contenham dados de itens - método mais específico
+        const elementos = document.querySelectorAll('div, p, span, td, li');
+        const dadosEncontrados = new Map(); // Para agrupar dados relacionados
+        
+        // Primeiro, procurar por descrições específicas de itens
+        for (const el of elementos) {
+          const texto = el.innerText?.trim();
+          
+          // Procurar por descrições de itens mais específicas
+          if (texto && 
+              texto.length > 5 && 
+              texto.length < 200 &&
+              !texto.includes('\n') &&
+              !texto.includes('Portal Nacional') &&
+              !texto.includes('Buscar no') &&
+              !texto.includes('Exibir:') &&
+              !texto.includes('Página:') &&
+              !texto.includes('Voltar') &&
+              !texto.includes('Número') &&
+              !texto.includes('Descrição') &&
+              !texto.includes('Quantidade') &&
+              !texto.includes('Valor') &&
+              !texto.includes('Detalhar') &&
+              !texto.includes('Itens') &&
+              !texto.includes('Arquivos') &&
+              !texto.includes('Histórico') &&
+              (texto.includes('Bateria') || 
+               texto.includes('lítio') ||
+               texto.includes('Alimentação') || 
+               texto.includes('Serviços') ||
+               texto.includes('Material') ||
+               texto.includes('Equipamento') ||
+               texto.includes('Obra') ||
+               texto.includes('Consultoria') ||
+               texto.includes('Consumo') ||
+               texto.includes('Fornecimento') ||
+               texto.includes('Aquisição'))) {
+            
+            if (!dadosEncontrados.has(texto)) {
+              dadosEncontrados.set(texto, {
+                descricao: texto,
+                quantidade: null,
+                valor_unitario: null,
+                valor_total: null
+              });
+              console.log('    ✓ Encontrou item:', texto);
+            }
+          }
+        }
+        
+        // Depois, procurar por quantidades e valores próximos aos itens encontrados
+        for (const el of elementos) {
+          const texto = el.innerText?.trim();
+          
+          // Procurar por quantidades (números simples)
+          if (texto && /^\d+$/.test(texto) && parseInt(texto) > 0 && parseInt(texto) < 10000) {
+            // Associar quantidade ao último item encontrado
+            const ultimaDescricao = Array.from(dadosEncontrados.keys()).pop();
+            if (ultimaDescricao) {
+              dadosEncontrados.get(ultimaDescricao).quantidade = parseInt(texto);
+              console.log('    ✓ Encontrou quantidade:', texto);
+            }
+          }
+          
+          // Procurar por valores monetários
+          if (texto && texto.includes('R$')) {
+            const valor = texto.match(/R\$\s*[\d.,]+/);
+            if (valor) {
+              const valorNumerico = valor[0].replace(/[^\d,]/g, '').replace(',', '.');
+              // Associar valor ao último item encontrado
+              const ultimaDescricao = Array.from(dadosEncontrados.keys()).pop();
+              if (ultimaDescricao) {
+                const dados = dadosEncontrados.get(ultimaDescricao);
+                if (!dados.valor_unitario) {
+                  dados.valor_unitario = valorNumerico;
+                  console.log('    ✓ Encontrou valor unitário:', valor[0]);
+                } else if (!dados.valor_total) {
+                  dados.valor_total = valorNumerico;
+                  console.log('    ✓ Encontrou valor total:', valor[0]);
+                }
+              }
+            }
+          }
+        }
+        
+        // Converter para array de itens
+        let numero = 1;
+        for (const [descricao, dados] of dadosEncontrados) {
           items.push({
-            numero: items.length + 1,
-            descricao: texto,
-            quantidade: null,
+            numero: numero++,
+            descricao: dados.descricao,
+            quantidade: dados.quantidade,
             unidade: null,
-            valor_unitario: null,
-            valor_total: null
+            valor_unitario: dados.valor_unitario,
+            valor_total: dados.valor_total
           });
         }
-      });
+      }
       
+      
+      console.log(`    ✓ Extraídos ${items.length} itens`);
       return items;
     });
   }

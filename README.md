@@ -89,6 +89,9 @@ O Render detectará automaticamente o `render.yaml` e fará o deploy!
 ## 🧪 Testes
 
 ```bash
+# Teste de uma URL específica (scraping detalhado)
+npm run teste-url
+
 # Teste completo com Supabase
 npm run teste
 
@@ -101,6 +104,12 @@ npm run teste-scheduler
 # Extração manual
 npm run extrair
 ```
+
+### 🎯 Teste de URL Específica
+Para testar o scraping detalhado de um edital:
+1. Edite `src/teste-url-especifica.js` e altere a constante `URL_TESTE`
+2. Execute: `npm run teste-url`
+3. Veja o [Guia Completo](./TESTE-SCRAPING.md)
 
 ## 📊 Estrutura do Banco
 

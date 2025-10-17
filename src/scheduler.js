@@ -7,6 +7,7 @@ class SchedulerPNCP {
   constructor() {
     this.isRunning = false;
     this.currentExecution = null;
+    this.currentStep = '';
     this.config = {
       horaExecucao: '08:00',
       ativo: true,
@@ -167,11 +168,13 @@ class SchedulerPNCP {
       console.log('[SCHEDULER] 🚀 Iniciando processo completo...');
       
       // 1. Extrair URLs do dia anterior
+      this.currentStep = 'Extraindo URLs do dia anterior...';
       console.log('[SCHEDULER] 📥 Passo 1: Extraindo URLs...');
       const dadosExtracao = await extrator.extrairEditaisDiaAnterior();
       const resultadoExtracao = await extrator.salvarSupabase(dadosExtracao);
       
       // 2. Processar editais (scraping completo)
+      this.currentStep = 'Processando editais (scraping completo)...';
       console.log('[SCHEDULER] 🔍 Passo 2: Processando editais...');
       const resultadoProcessamento = await processador.processarEditaisRefinado(this.config.limiteProcessamento);
       
@@ -194,6 +197,7 @@ class SchedulerPNCP {
       // 4. Atualizar última execução
       await this.atualizarUltimaExecucao();
       
+      this.currentStep = 'Processo concluído';
       console.log(`[SCHEDULER] ✅ Processo completo finalizado em ${tempoExecucao}s`);
       
       return {
@@ -206,6 +210,7 @@ class SchedulerPNCP {
 
     } catch (error) {
       console.error('[SCHEDULER] ❌ Erro no processo completo:', error.message);
+      this.currentStep = `Erro: ${error.message}`;
       
       if (this.currentExecution) {
         await this.finalizarRegistroExecucao(this.currentExecution, {
@@ -218,6 +223,7 @@ class SchedulerPNCP {
     } finally {
       this.isRunning = false;
       this.currentExecution = null;
+      this.currentStep = '';
     }
   }
 

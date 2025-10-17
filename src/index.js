@@ -1,9 +1,11 @@
 const express = require('express');
+const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const extrator = require('./extrator');
 const processador = require('./processar');
 const scheduler = require('./scheduler');
+const supabase = require('./config/supabase');
 require('dotenv').config();
 
 const app = express();
@@ -24,6 +26,14 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Servir arquivos estaticos do dashboard
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Rota principal - Dashboard
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
@@ -38,7 +48,7 @@ app.get('/swagger.json', (req, res) => {
 
 /**
  * @swagger
- * /:
+ * /api/info:
  *   get:
  *     summary: Informacoes da API
  *     description: Retorna informacoes basicas sobre a API
@@ -47,11 +57,12 @@ app.get('/swagger.json', (req, res) => {
  *       200:
  *         description: Informacoes da API
  */
-app.get('/', (req, res) => {
+app.get('/api/info', (req, res) => {
   res.json({
     message: 'Extrator de Editais PNCP',
-    versao: '1.0.0',
+    versao: '2.0.0',
     documentacao: '/api-docs',
+    dashboard: '/',
     endpoints: {
       extrair: 'POST /api/extrair - Extrai editais do dia anterior',
       processar: 'POST /api/processar - Processa editais pendentes (scraping completo)',
@@ -61,7 +72,9 @@ app.get('/', (req, res) => {
       scheduler: 'POST /api/scheduler/executar - Executa processo completo',
       configurar: 'POST /api/scheduler/configurar - Configura horário e parâmetros',
       schedulerStatus: 'GET /api/scheduler/status - Status do scheduler',
-      historico: 'GET /api/scheduler/historico - Histórico de execuções'
+      historico: 'GET /api/scheduler/historico - Histórico de execuções',
+      statusSistema: 'GET /api/status-sistema - Status geral do sistema',
+      pendentes: 'GET /api/pendentes - Lista editais pendentes'
     }
   });
 });
@@ -139,11 +152,22 @@ app.post('/api/processar', async (req, res) => {
   try {
     const limite = req.body.limite || 100;
     
-    // Iniciar processamento (pode demorar muito)
-    // Em produção, considere usar worker/background job
-    const resultado = await processador.processarEditais(limite);
+    // Responder imediatamente e executar processamento em background
+    res.json({ 
+      sucesso: true, 
+      mensagem: 'Processamento iniciado em background',
+      limite: limite
+    });
     
-    res.json(resultado);
+    // Executar processamento em background (não aguardar)
+    processador.processarEditaisRefinado(limite)
+      .then(resultado => {
+        console.log('[API] Processamento concluído:', resultado);
+      })
+      .catch(error => {
+        console.error('[API] Erro no processamento:', error);
+      });
+      
   } catch (error) {
     res.status(500).json({ 
       erro: error.message 
@@ -186,7 +210,7 @@ app.post('/api/processar-url', async (req, res) => {
       });
     }
     
-    const resultado = await processador.processarUmaURL(url);
+    const resultado = await processador.processarUmaURLRefinada(url);
     
     res.json(resultado);
   } catch (error) {
@@ -208,8 +232,382 @@ app.post('/api/processar-url', async (req, res) => {
  *         description: Status do processamento
  */
 app.get('/api/processar/status', (req, res) => {
-  const status = processador.getStatus();
+  const status = processador.getStatusRefinado();
   res.json(status);
+});
+
+// Endpoint para listar editais estruturados com paginação
+app.get('/api/editais-estruturados', async (req, res) => {
+  try {
+    const { 
+      pagina = 1, 
+      limite = 20, 
+      ordenacao = 'data_extracao', 
+      direcao = 'desc'
+    } = req.query;
+
+    const offset = (parseInt(pagina) - 1) * parseInt(limite);
+    
+    // Aplicar ordenação
+    const camposValidos = ['titulo_edital', 'orgao', 'cnpj_orgao', 'ano', 'data_extracao', 'created_at'];
+    const campoOrdenacao = camposValidos.includes(ordenacao) ? ordenacao : 'data_extracao';
+    const direcaoOrdenacao = direcao === 'asc';
+
+    // Buscar dados
+    const { data, error } = await supabase
+      .from('editais_estruturados')
+      .select('*')
+      .order(campoOrdenacao, { ascending: direcaoOrdenacao })
+      .range(offset, offset + parseInt(limite) - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    // Contar total de registros
+    const { count } = await supabase
+      .from('editais_estruturados')
+      .select('*', { count: 'exact', head: true });
+
+    const total = count || 0;
+
+    res.json({
+      sucesso: true,
+      dados: data || [],
+      total: parseInt(total),
+      pagina: parseInt(pagina),
+      limite: parseInt(limite),
+      totalPaginas: Math.ceil(total / parseInt(limite))
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar editais estruturados:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para popular tabela final estruturada
+app.post('/api/popular-tabela-final', async (req, res) => {
+  try {
+    console.log('[API] Estrutura simplificada - dados já disponíveis na view');
+    
+    // Com a nova estrutura, os dados já estão disponíveis na view
+    // Não precisamos mais popular uma tabela separada
+    
+    res.json({
+      sucesso: true,
+      mensagem: `Dados já disponíveis na estrutura simplificada`,
+      total_registros: 'N/A - Dados em tempo real'
+    });
+
+  } catch (error) {
+    console.error('Erro ao acessar dados:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para listar dados da tabela final
+app.get('/api/editais-final', async (req, res) => {
+  try {
+    const { 
+      pagina = 1, 
+      limite = 100, 
+      ordenacao = 'data_extracao', 
+      direcao = 'desc',
+      formato = 'json' // json ou csv
+    } = req.query;
+
+    const offset = (parseInt(pagina) - 1) * parseInt(limite);
+    
+    // Aplicar ordenação
+    const camposValidos = ['titulo_edital', 'orgao', 'cnpj_orgao', 'ano', 'data_extracao', 'item_numero'];
+    const campoOrdenacao = camposValidos.includes(ordenacao) ? ordenacao : 'data_extracao';
+    const direcaoOrdenacao = direcao === 'asc';
+
+    // Buscar dados da view simplificada
+    const { data, error } = await supabase
+      .from('v_editais_final_export')
+      .select('*')
+      .order(campoOrdenacao, { ascending: direcaoOrdenacao })
+      .range(offset, offset + parseInt(limite) - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    // Contar total de registros
+    const { count } = await supabase
+      .from('v_editais_final_export')
+      .select('*', { count: 'exact', head: true });
+
+    const total = count || 0;
+
+    if (formato === 'csv') {
+      // Para CSV, buscar dados completos da tabela editais_estruturados
+      const { data: dadosCompletos, error: errorCompletos } = await supabase
+        .from('editais_estruturados')
+        .select('*')
+        .order('data_extracao', { ascending: false });
+
+      if (errorCompletos) {
+        throw errorCompletos;
+      }
+
+      // Gerar CSV com todos os dados expandidos
+      const csvHeaders = [
+        'ID PNCP', 'URL Edital', 'CNPJ Órgão', 'Órgão',
+        'Ano', 'Número', 'Título Edital', 'Modalidade', 'Situação',
+        'Valor Estimado', 'Valor Homologado', 'Data Publicação', 'Data Extração',
+        'Objeto', 'Total Itens', 'Total Anexos', 'Total Histórico',
+        'Todos Itens (JSON)', 'Todos Anexos (JSON)', 'Todo Histórico (JSON)',
+        'Objeto Completo (JSON)', 'Dados Financeiros (JSON)'
+      ];
+
+      const csvRows = dadosCompletos.map(row => [
+        row.id_pncp || '',
+        row.url_edital || '',
+        row.cnpj_orgao || '',
+        row.orgao || '',
+        row.ano || '',
+        row.numero || '',
+        (row.titulo_edital || '').replace(/"/g, '""'),
+        (row.objeto_completo?.modalidade || '').replace(/"/g, '""'),
+        (row.objeto_completo?.situacao || '').replace(/"/g, '""'),
+        row.dados_financeiros?.valor_estimado || '',
+        row.dados_financeiros?.valor_homologado || '',
+        row.objeto_completo?.data_publicacao || '',
+        row.data_extracao || '',
+        (row.objeto_completo?.objeto || '').replace(/"/g, '""'),
+        row.itens ? row.itens.length : 0,
+        row.anexos ? row.anexos.length : 0,
+        row.historico ? row.historico.length : 0,
+        JSON.stringify(row.itens || []).replace(/"/g, '""'),
+        JSON.stringify(row.anexos || []).replace(/"/g, '""'),
+        JSON.stringify(row.historico || []).replace(/"/g, '""'),
+        JSON.stringify(row.objeto_completo || {}).replace(/"/g, '""'),
+        JSON.stringify(row.dados_financeiros || {}).replace(/"/g, '""')
+      ]);
+
+      const csvContent = [
+        csvHeaders.map(h => `"${h}"`).join(','),
+        ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="editais_final_${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send('\uFEFF' + csvContent); // BOM para UTF-8
+      return;
+    }
+
+    res.json({
+      sucesso: true,
+      dados: data || [],
+      total: parseInt(total),
+      pagina: parseInt(pagina),
+      limite: parseInt(limite),
+      totalPaginas: Math.ceil(total / parseInt(limite))
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar editais final:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para resumo da tabela final
+app.get('/api/editais-final/resumo', async (req, res) => {
+  try {
+    // Buscar resumo diretamente da view
+    const { data, error } = await supabase
+      .from('v_editais_final_export')
+      .select('*');
+
+    if (error) {
+      throw error;
+    }
+
+    // Calcular resumo dos dados
+    const resumo = {
+      total_registros: data.length,
+      editais_unicos: new Set(data.map(item => item.id_pncp)).size,
+      orgaos: new Set(data.map(item => item.orgao).filter(Boolean)).size,
+      total_itens: data.reduce((sum, item) => sum + (item.item_numero || 0), 0)
+    };
+
+    res.json({
+      sucesso: true,
+      resumo: resumo
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar resumo da tabela final:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para listar editais problemáticos
+app.get('/api/editais-problematicos', async (req, res) => {
+  try {
+    const { 
+      pagina = 1, 
+      limite = 20, 
+      tipo = 'todos' // todos, falha_multipla, lento, sem_itens, outro
+    } = req.query;
+
+    const offset = (parseInt(pagina) - 1) * parseInt(limite);
+    
+    let query = supabase
+      .from('v_editais_problematicos')
+      .select('*')
+      .order('tentativas_processamento', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    // Aplicar filtro por tipo de problema
+    if (tipo !== 'todos') {
+      query = query.eq('tipo_problema', tipo.toUpperCase());
+    }
+
+    const { data, error } = await query.range(offset, offset + parseInt(limite) - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    // Contar total de registros
+    let countQuery = supabase
+      .from('v_editais_problematicos')
+      .select('*', { count: 'exact', head: true });
+
+    if (tipo !== 'todos') {
+      countQuery = countQuery.eq('tipo_problema', tipo.toUpperCase());
+    }
+
+    const { count } = await countQuery;
+    const total = count || 0;
+
+    res.json({
+      sucesso: true,
+      dados: data || [],
+      total: parseInt(total),
+      pagina: parseInt(pagina),
+      limite: parseInt(limite),
+      totalPaginas: Math.ceil(total / parseInt(limite))
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar editais problemáticos:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para resetar editais falhados
+app.post('/api/reset-editais-falhados', async (req, res) => {
+  try {
+    console.log('[API] Resetando editais falhados...');
+    
+    const { data, error } = await supabase.rpc('reset_editais_falhados');
+    
+    if (error) {
+      throw error;
+    }
+
+    const totalResetados = data?.[0]?.total_resetados || 0;
+    
+    console.log(`[API] ${totalResetados} editais resetados com sucesso`);
+    
+    res.json({
+      sucesso: true,
+      mensagem: `${totalResetados} editais falhados foram resetados`,
+      total_resetados: totalResetados
+    });
+
+  } catch (error) {
+    console.error('Erro ao resetar editais falhados:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+// Endpoint para reprocessar edital específico
+app.post('/api/reprocessar-edital', async (req, res) => {
+  try {
+    const { id } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: 'ID do edital é obrigatório'
+      });
+    }
+
+    console.log(`[API] Reprocessando edital: ${id}`);
+    
+    // Resetar tentativas do edital
+    const { error: resetError } = await supabase
+      .from('editais_pncp')
+      .update({
+        tentativas_processamento: 0,
+        ultimo_erro: null,
+        status_processamento: 'pendente',
+        processado: false
+      })
+      .eq('id', id);
+
+    if (resetError) {
+      throw resetError;
+    }
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Edital marcado para reprocessamento'
+    });
+
+  } catch (error) {
+    console.error('Erro ao reprocessar edital:', error);
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/scheduler/progresso:
+ *   get:
+ *     summary: Progresso do scheduler em tempo real
+ *     description: Retorna o progresso atual da execução do scheduler
+ *     tags: [Scheduler]
+ *     responses:
+ *       200:
+ *         description: Progresso atual
+ */
+app.get('/api/scheduler/progresso', (req, res) => {
+  const status = scheduler.getStatus();
+  const processadorStatus = processador.getStatusRefinado();
+  
+  res.json({
+    scheduler: status,
+    processador: processadorStatus,
+    timestamp: new Date().toISOString()
+  });
 });
 
 /**
@@ -430,10 +828,87 @@ app.get('/api/scheduler/historico', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/status-sistema:
+ *   get:
+ *     summary: Status geral do sistema
+ *     description: Retorna metricas gerais de processamento
+ *     tags: [Monitoramento]
+ *     responses:
+ *       200:
+ *         description: Status retornado
+ */
+app.get('/api/status-sistema', async (req, res) => {
+  try {
+    const { data, error } = await require('./config/supabase')
+      .from('v_status_sistema')
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      sucesso: true,
+      timestamp: new Date().toISOString(),
+      data: data
+    });
+  } catch (error) {
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/pendentes:
+ *   get:
+ *     summary: Lista editais pendentes
+ *     description: Retorna editais que ainda nao foram processados
+ *     tags: [Monitoramento]
+ *     parameters:
+ *       - in: query
+ *         name: limite
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *     responses:
+ *       200:
+ *         description: Lista retornada
+ */
+app.get('/api/pendentes', async (req, res) => {
+  try {
+    const limite = parseInt(req.query.limite) || 50;
+    const supabase = require('./config/supabase');
+
+    const { data, error, count } = await supabase
+      .from('v_editais_pendentes')
+      .select('*', { count: 'exact' })
+      .limit(limite);
+
+    if (error) throw error;
+
+    res.json({
+      sucesso: true,
+      total: count,
+      limite: limite,
+      data: data
+    });
+  } catch (error) {
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
 app.listen(PORT, async () => {
   console.log(`[SERVER] Servidor rodando na porta ${PORT}`);
   console.log(`[API] URL Base da API PNCP: ${process.env.PNCP_API_BASE_URL}`);
-  console.log(`\n[ACESSO] http://localhost:${PORT}`);
+  console.log(`\n[DASHBOARD] http://localhost:${PORT}`);
+  console.log(`[API INFO] http://localhost:${PORT}/api/info`);
   console.log(`[SWAGGER] http://localhost:${PORT}/api-docs`);
   console.log(`[SWAGGER JSON] http://localhost:${PORT}/swagger.json\n`);
   
