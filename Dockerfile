@@ -14,11 +14,12 @@ RUN apt-get update \
 # Criar diretório da aplicação
 WORKDIR /app
 
-# Copiar package.json e package-lock.json
-COPY package*.json ./
+# Copiar arquivos de dependências
+COPY package.json ./
+COPY package-lock.json* ./
 
 # Instalar dependências
-RUN npm ci --only=production
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 # Copiar código da aplicação
 COPY . .
