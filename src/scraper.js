@@ -41,35 +41,20 @@ class ScraperEstruturaReal {
         ]
       };
 
-      // Se estiver em produção (Render), usar Chrome do sistema
+      // Se estiver em produção (Docker), usar Chrome do container
       if (isProduction) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
-        console.log('[BROWSER] Usando Chrome do sistema:', launchOptions.executablePath);
+        launchOptions.executablePath = '/usr/bin/google-chrome-stable';
+        console.log('[BROWSER] Usando Chrome do Docker:', launchOptions.executablePath);
       }
 
       try {
         this.browser = await puppeteer.launch(launchOptions);
-      console.log('[BROWSER] Navegador iniciado com sucesso');
+        console.log('[BROWSER] Navegador iniciado com sucesso');
         this.startIdleTimer();
       } catch (error) {
         console.error('[BROWSER] Erro ao iniciar navegador:', error.message);
-        
-        // Fallback: tentar sem executablePath
-        if (isProduction) {
-          console.log('[BROWSER] Tentando fallback sem executablePath...');
-          try {
-            delete launchOptions.executablePath;
-            this.browser = await puppeteer.launch(launchOptions);
-            console.log('[BROWSER] Navegador iniciado com fallback');
-            this.startIdleTimer();
-          } catch (fallbackError) {
-            console.error('[BROWSER] Fallback também falhou:', fallbackError.message);
-            console.log('[BROWSER] Usando modo HTTP/Cheerio como último recurso');
-            this.browser = 'HTTP_MODE'; // Marca para usar HTTP
-          }
-        } else {
-          throw error;
-        }
+        console.log('[BROWSER] Usando modo HTTP/Cheerio como fallback');
+        this.browser = 'HTTP_MODE'; // Marca para usar HTTP
       }
     }
     this.lastUsed = Date.now();
