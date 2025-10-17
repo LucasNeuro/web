@@ -9,6 +9,19 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configurar CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 app.use(express.json());
 
 // Swagger UI
@@ -44,6 +57,7 @@ app.get('/', (req, res) => {
       processar: 'POST /api/processar - Processa editais pendentes (scraping completo)',
       processarUrl: 'POST /api/processar-url - Processa uma URL específica',
       status: 'GET /api/processar/status - Status do processamento',
+      testeCompleto: 'POST /api/teste-completo - Teste completo do sistema (extração + scraping)',
       scheduler: 'POST /api/scheduler/executar - Executa processo completo',
       configurar: 'POST /api/scheduler/configurar - Configura horário e parâmetros',
       schedulerStatus: 'GET /api/scheduler/status - Status do scheduler',
@@ -218,6 +232,106 @@ app.post('/api/scheduler/executar', async (req, res) => {
   } catch (error) {
     res.status(500).json({ 
       erro: error.message 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/teste-completo:
+ *   post:
+ *     summary: Teste completo do sistema
+ *     description: Executa todo o processo (extração + scraping) para testar se está funcionando
+ *     tags: [Sistema]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               limite:
+ *                 type: integer
+ *                 default: 5
+ *                 description: Quantidade de editais para processar no teste
+ *               forcarExtracao:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Forçar extração mesmo se já existirem dados do dia
+ *     responses:
+ *       200:
+ *         description: Teste executado com sucesso
+ *       500:
+ *         description: Erro durante o teste
+ */
+app.post('/api/teste-completo', async (req, res) => {
+  try {
+    const limite = req.body.limite || 5;
+    const forcarExtracao = req.body.forcarExtracao !== false;
+    
+    console.log(`[TESTE] Iniciando teste completo com limite: ${limite}`);
+    
+    // 1. Extrair URLs do dia anterior
+    console.log('[TESTE] Passo 1: Extraindo URLs...');
+    const dadosExtracao = await extrator.extrairEditaisDiaAnterior();
+    
+    // Se não forçar e já tiver dados, usar os existentes
+    if (!forcarExtracao) {
+      console.log('[TESTE] Verificando se já existem dados do dia...');
+      const hoje = new Date().toISOString().split('T')[0];
+      const { data: editaisExistentes } = await require('./config/supabase')
+        .from('editais_pncp')
+        .select('*')
+        .eq('data_referencia', hoje);
+      
+      if (editaisExistentes && editaisExistentes.length > 0) {
+        console.log(`[TESTE] Encontrados ${editaisExistentes.length} editais existentes, usando-os`);
+        dadosExtracao.editais = editaisExistentes;
+        dadosExtracao.totalEditais = editaisExistentes.length;
+      }
+    }
+    
+    const resultadoExtracao = await extrator.salvarSupabase(dadosExtracao);
+    
+    // 2. Processar editais (scraping)
+    console.log(`[TESTE] Passo 2: Processando ${limite} editais...`);
+    const resultadoProcessamento = await processador.processarEditaisRefinado(limite);
+    
+    // 3. Resultado final
+    const resultado = {
+      sucesso: true,
+      timestamp: new Date().toISOString(),
+      teste: true,
+      extração: {
+        totalEncontrados: dadosExtracao.totalEditais,
+        totalSalvos: resultadoExtracao.totalSalvos,
+        totalErros: resultadoExtracao.totalErros,
+        dataReferencia: dadosExtracao.dataReferencia
+      },
+      processamento: {
+        limite: limite,
+        totalProcessados: resultadoProcessamento.totalProcessados || 0,
+        totalSalvos: resultadoProcessamento.totalSalvos || 0,
+        totalErros: resultadoProcessamento.totalErros || 0,
+        tempoMedio: resultadoProcessamento.tempoMedio || 0
+      },
+      resumo: {
+        editaisExtraidos: resultadoExtracao.totalSalvos,
+        editaisProcessados: resultadoProcessamento.totalSalvos || 0,
+        sucessoTotal: resultadoExtracao.totalSalvos + (resultadoProcessamento.totalSalvos || 0),
+        errosTotal: resultadoExtracao.totalErros + (resultadoProcessamento.totalErros || 0)
+      }
+    };
+    
+    console.log('[TESTE] Teste completo finalizado com sucesso!');
+    res.json(resultado);
+    
+  } catch (error) {
+    console.error('[TESTE] Erro no teste completo:', error.message);
+    res.status(500).json({ 
+      sucesso: false,
+      erro: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });

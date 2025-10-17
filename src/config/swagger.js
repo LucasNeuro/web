@@ -19,12 +19,12 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
-        description: 'Servidor de Desenvolvimento'
-      },
-      {
-        url: 'https://pncp.gov.br/api',
-        description: 'API PNCP - Producao'
+        url: process.env.NODE_ENV === 'production' 
+          ? 'https://web-kpbm.onrender.com'
+          : 'http://localhost:3000',
+        description: process.env.NODE_ENV === 'production' 
+          ? 'Servidor de Produção (Render)'
+          : 'Servidor de Desenvolvimento'
       }
     ],
     tags: [
