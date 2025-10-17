@@ -39,29 +39,44 @@ class ScraperEstruturaReal {
         ]
       };
 
-      // Se estiver em produção (Render), usar Chrome do sistema
+      // Se estiver em produção (Render), tentar múltiplas opções de Chrome
       if (isProduction) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
-        console.log('[BROWSER] Usando Chrome do sistema:', launchOptions.executablePath);
-      }
+        const chromePaths = [
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/google-chrome',
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium',
+          '/opt/google/chrome/chrome'
+        ];
 
-      try {
-        this.browser = await puppeteer.launch(launchOptions);
-        console.log('[BROWSER] Navegador iniciado com sucesso');
-        this.startIdleTimer();
-      } catch (error) {
-        console.error('[BROWSER] Erro ao iniciar navegador:', error.message);
-        
-        // Fallback: tentar sem executablePath
-        if (isProduction) {
-          console.log('[BROWSER] Tentando fallback sem executablePath...');
+        let chromeFound = false;
+        for (const chromePath of chromePaths) {
+          try {
+            launchOptions.executablePath = chromePath;
+            console.log('[BROWSER] Tentando Chrome em:', chromePath);
+            this.browser = await puppeteer.launch(launchOptions);
+            console.log('[BROWSER] Navegador iniciado com sucesso em:', chromePath);
+            chromeFound = true;
+            break;
+          } catch (error) {
+            console.log('[BROWSER] Chrome não encontrado em:', chromePath);
+            continue;
+          }
+        }
+
+        if (!chromeFound) {
+          console.log('[BROWSER] Tentando sem executablePath (Chrome bundled)...');
           delete launchOptions.executablePath;
           this.browser = await puppeteer.launch(launchOptions);
-          console.log('[BROWSER] Navegador iniciado com fallback');
-          this.startIdleTimer();
-        } else {
-          throw error;
+          console.log('[BROWSER] Navegador iniciado com Chrome bundled');
         }
+        
+        this.startIdleTimer();
+      } else {
+        // Desenvolvimento local
+        this.browser = await puppeteer.launch(launchOptions);
+      console.log('[BROWSER] Navegador iniciado com sucesso');
+        this.startIdleTimer();
       }
     }
     this.lastUsed = Date.now();
