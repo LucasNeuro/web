@@ -152,6 +152,15 @@ app.post('/api/processar', async (req, res) => {
   try {
     const limite = req.body.limite || 100;
     
+    // Verificar se já está processando
+    const status = processador.getStatusRefinado();
+    if (status.isProcessing) {
+      return res.status(409).json({ 
+        erro: 'Processamento já está em andamento',
+        status: status
+      });
+    }
+    
     // Responder imediatamente e executar processamento em background
     res.json({ 
       sucesso: true, 
@@ -359,40 +368,73 @@ app.get('/api/editais-final', async (req, res) => {
         throw errorCompletos;
       }
 
-      // Gerar CSV com todos os dados expandidos
+      // Gerar CSV com dados estruturados
       const csvHeaders = [
         'ID PNCP', 'URL Edital', 'CNPJ Órgão', 'Órgão',
         'Ano', 'Número', 'Título Edital', 'Modalidade', 'Situação',
         'Valor Estimado', 'Valor Homologado', 'Data Publicação', 'Data Extração',
         'Objeto', 'Total Itens', 'Total Anexos', 'Total Histórico',
+        'Link Documento 1', 'Link Documento 2', 'Link Documento 3', 'Link Documento 4', 'Link Documento 5',
+        'Link Documento 6', 'Link Documento 7', 'Link Documento 8', 'Link Documento 9', 'Link Documento 10',
+        'Nome Documento 1', 'Nome Documento 2', 'Nome Documento 3', 'Nome Documento 4', 'Nome Documento 5',
+        'Nome Documento 6', 'Nome Documento 7', 'Nome Documento 8', 'Nome Documento 9', 'Nome Documento 10',
+        'Bloco Itens', 'Bloco Histórico',
         'Todos Itens (JSON)', 'Todos Anexos (JSON)', 'Todo Histórico (JSON)',
         'Objeto Completo (JSON)', 'Dados Financeiros (JSON)'
       ];
 
-      const csvRows = dadosCompletos.map(row => [
-        row.id_pncp || '',
-        row.url_edital || '',
-        row.cnpj_orgao || '',
-        row.orgao || '',
-        row.ano || '',
-        row.numero || '',
-        (row.titulo_edital || '').replace(/"/g, '""'),
-        (row.objeto_completo?.modalidade || '').replace(/"/g, '""'),
-        (row.objeto_completo?.situacao || '').replace(/"/g, '""'),
-        row.dados_financeiros?.valor_estimado || '',
-        row.dados_financeiros?.valor_homologado || '',
-        row.objeto_completo?.data_publicacao || '',
-        row.data_extracao || '',
-        (row.objeto_completo?.objeto || '').replace(/"/g, '""'),
-        row.itens ? row.itens.length : 0,
-        row.anexos ? row.anexos.length : 0,
-        row.historico ? row.historico.length : 0,
-        JSON.stringify(row.itens || []).replace(/"/g, '""'),
-        JSON.stringify(row.anexos || []).replace(/"/g, '""'),
-        JSON.stringify(row.historico || []).replace(/"/g, '""'),
-        JSON.stringify(row.objeto_completo || {}).replace(/"/g, '""'),
-        JSON.stringify(row.dados_financeiros || {}).replace(/"/g, '""')
-      ]);
+      const csvRows = dadosCompletos.map(row => {
+        // Extrair links de documentos (até 10)
+        const links = [];
+        const nomes = [];
+        for (let i = 0; i < 10; i++) {
+          links.push(row.anexos?.[i]?.url || '');
+          nomes.push(row.anexos?.[i]?.nome || '');
+        }
+        
+        // Criar bloco de itens
+        const blocoItens = row.itens?.map((item, index) => 
+          `ITEM ${item.numero || index + 1}: ${item.descricao || 'N/A'} | QTD: ${item.quantidade || '0'} | VALOR: R$ ${item.valor_total || '0,00'}`
+        ).join('\n') || '';
+        
+        // Criar bloco de histórico
+        const blocoHistorico = row.historico?.map(evento => 
+          `EVENTO: ${evento.evento || 'N/A'} | DATA: ${evento.data || 'N/A'} | DESC: ${evento.descricao || 'N/A'}`
+        ).join('\n') || '';
+        
+        return [
+          row.id_pncp || '',
+          row.url_edital || '',
+          row.cnpj_orgao || '',
+          row.orgao || '',
+          row.ano || '',
+          row.numero || '',
+          (row.titulo_edital || '').replace(/"/g, '""'),
+          (row.objeto_completo?.modalidade || '').replace(/"/g, '""'),
+          (row.objeto_completo?.situacao || '').replace(/"/g, '""'),
+          row.dados_financeiros?.valor_estimado || '',
+          row.dados_financeiros?.valor_homologado || '',
+          row.objeto_completo?.data_publicacao || '',
+          row.data_extracao || '',
+          (row.objeto_completo?.objeto || '').replace(/"/g, '""'),
+          row.itens ? row.itens.length : 0,
+          row.anexos ? row.anexos.length : 0,
+          row.historico ? row.historico.length : 0,
+          // Links de documentos (10 colunas)
+          ...links,
+          // Nomes de documentos (10 colunas)
+          ...nomes,
+          // Blocos de texto
+          blocoItens.replace(/"/g, '""'),
+          blocoHistorico.replace(/"/g, '""'),
+          // JSONs completos
+          JSON.stringify(row.itens || []).replace(/"/g, '""'),
+          JSON.stringify(row.anexos || []).replace(/"/g, '""'),
+          JSON.stringify(row.historico || []).replace(/"/g, '""'),
+          JSON.stringify(row.objeto_completo || {}).replace(/"/g, '""'),
+          JSON.stringify(row.dados_financeiros || {}).replace(/"/g, '""')
+        ];
+      });
 
       const csvContent = [
         csvHeaders.map(h => `"${h}"`).join(','),
@@ -918,6 +960,40 @@ app.listen(PORT, async () => {
     console.log('[SCHEDULER] ✅ Scheduler inicializado com sucesso');
   } catch (error) {
     console.error('[SCHEDULER] ❌ Erro ao inicializar scheduler:', error.message);
+  }
+});
+
+// Endpoint para buscar edital específico com dados completos
+app.get('/api/edital/:idPncp', async (req, res) => {
+  try {
+    const { idPncp } = req.params;
+    
+    const { data, error } = await supabase
+      .from('editais_estruturados')
+      .select('*')
+      .eq('id_pncp', idPncp)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          sucesso: false,
+          erro: 'Edital não encontrado'
+        });
+      }
+      throw error;
+    }
+
+    res.json({
+      sucesso: true,
+      data: data
+    });
+  } catch (error) {
+    console.error('Erro ao buscar edital:', error);
+    res.status(500).json({ 
+      erro: 'Erro ao buscar edital',
+      detalhes: error.message 
+    });
   }
 });
 

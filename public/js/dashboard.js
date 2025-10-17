@@ -377,8 +377,22 @@ async function processarPendentes() {
     });
 
     const result = await response.json();
+    console.log('[DEBUG] Resposta do processamento:', result);
 
-    if (result.status === 'concluido') {
+    if (result.sucesso) {
+      // Aguardar um pouco para o processamento começar
+      setTimeout(async () => {
+        const statusResponse = await fetch(`${API_URL}/api/processar/status`);
+        const statusData = await statusResponse.json();
+        console.log('[DEBUG] Status após iniciar:', statusData);
+        
+        if (statusData.isProcessing) {
+          adicionarLogTerminal(terminalProcessamento, '✅ Processamento iniciado com sucesso!', 'text-green-400');
+        } else {
+          adicionarLogTerminal(terminalProcessamento, '⚠️ Processamento pode não ter iniciado', 'text-yellow-400');
+        }
+      }, 2000);
+    } else if (result.status === 'concluido') {
       adicionarLogTerminal(terminalProcessamento, '✅ Processamento concluído!', 'text-green-400');
       adicionarLogTerminal(terminalProcessamento, `📊 Processados: ${result.totalProcessados}`, 'text-green-400');
       adicionarLogTerminal(terminalProcessamento, `⏱️ Tempo: ${result.tempoTotal}s`, 'text-yellow-400');
@@ -530,6 +544,7 @@ async function atualizarTerminalProcessamento() {
     if (!response.ok) throw new Error('Erro na resposta');
     
     const data = await response.json();
+    console.log('[DEBUG] Status processamento:', data); // Debug log
     terminalEl.innerHTML = '';
     
     if (data.isProcessing) {
@@ -959,7 +974,7 @@ function inicializarSistema() {
   atualizarTodosTerminais();
   
   // Atualizar terminais a cada 5 segundos
-  setInterval(atualizarTodosTerminais, 5000);
+  setInterval(atualizarTodosTerminais, 2000);
 }
 
 // =====================================================
@@ -997,50 +1012,6 @@ async function carregarTabelaFinal() {
   }
 }
 
-// Carregar resumo da tabela final
-async function carregarResumoTabelaFinal() {
-  try {
-    const response = await fetch(`${API_URL}/api/editais-final/resumo`);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    
-    if (result.sucesso) {
-      renderizarResumoTabelaFinal(result.resumo);
-    }
-  } catch (error) {
-    console.error('Erro ao carregar resumo da tabela final:', error);
-  }
-}
-
-// Renderizar resumo da tabela final
-function renderizarResumoTabelaFinal(resumo) {
-  const container = document.getElementById('resumo-tabela-final');
-  if (!container) return;
-
-  container.innerHTML = `
-    <div class="bg-blue-600 rounded-lg p-4">
-      <div class="text-blue-100 text-sm font-medium">Total Registros</div>
-      <div class="text-white text-2xl font-bold">${resumo.total_registros || 0}</div>
-    </div>
-    <div class="bg-green-600 rounded-lg p-4">
-      <div class="text-green-100 text-sm font-medium">Editais Únicos</div>
-      <div class="text-white text-2xl font-bold">${resumo.total_editais_unicos || 0}</div>
-    </div>
-    <div class="bg-purple-600 rounded-lg p-4">
-      <div class="text-purple-100 text-sm font-medium">Órgãos</div>
-      <div class="text-white text-2xl font-bold">${resumo.total_orgaos || 0}</div>
-    </div>
-    <div class="bg-orange-600 rounded-lg p-4">
-      <div class="text-orange-100 text-sm font-medium">Total Itens</div>
-      <div class="text-white text-2xl font-bold">${resumo.total_itens_geral || 0}</div>
-    </div>
-  `;
-}
-
 // Renderizar tabela final
 function renderizarTabelaFinal() {
   const tbody = document.getElementById('tabela-final-body');
@@ -1048,7 +1019,7 @@ function renderizarTabelaFinal() {
   if (dadosTabelaFinal.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="px-4 py-8 text-center text-gray-400">
+        <td colspan="20" class="px-4 py-8 text-center text-gray-400">
           Nenhum registro encontrado
         </td>
       </tr>
@@ -1058,23 +1029,68 @@ function renderizarTabelaFinal() {
   
   tbody.innerHTML = dadosTabelaFinal.map(registro => `
     <tr class="hover:bg-gray-800 transition-colors">
-      <td class="px-4 py-3 text-sm text-white">
-        <div class="max-w-xs truncate" title="${registro.titulo_edital || 'N/A'}">
-          ${registro.titulo_edital || 'N/A'}
+      <td class="px-3 py-2 text-xs text-white">
+        <div class="max-w-32 truncate" title="${registro.id_pncp || 'N/A'}">
+          ${registro.id_pncp || 'N/A'}
         </div>
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
-        <div class="max-w-xs truncate" title="${registro.orgao || 'N/A'}">
+      <td class="px-3 py-2 text-xs text-gray-300">
+        <div class="max-w-32 truncate" title="${registro.url_edital || 'N/A'}">
+          <a href="${registro.url_edital || '#'}" target="_blank" class="text-blue-400 hover:text-blue-300">
+            ${registro.url_edital ? registro.url_edital.substring(0, 30) + '...' : 'N/A'}
+          </a>
+        </div>
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        ${registro.cnpj_orgao || 'N/A'}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        <div class="max-w-32 truncate" title="${registro.orgao || 'N/A'}">
           ${registro.orgao || 'N/A'}
         </div>
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
-        ${registro.cnpj_orgao || 'N/A'}
-      </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
+      <td class="px-3 py-2 text-xs text-gray-300">
         ${registro.ano || 'N/A'}
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
+      <td class="px-3 py-2 text-xs text-gray-300">
+        ${registro.numero || 'N/A'}
+      </td>
+      <td class="px-3 py-2 text-xs text-white">
+        <div class="max-w-40 truncate" title="${registro.titulo_edital || 'N/A'}">
+          ${registro.titulo_edital || 'N/A'}
+        </div>
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        <div class="max-w-24 truncate" title="${registro.modalidade || 'N/A'}">
+          ${registro.modalidade || 'N/A'}
+        </div>
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        <div class="max-w-24 truncate" title="${registro.situacao || 'N/A'}">
+          ${registro.situacao || 'N/A'}
+        </div>
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        ${registro.valor_estimado || '0'}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        ${registro.valor_homologado || '0'}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        <div class="max-w-40 truncate" title="${registro.objeto || 'N/A'}">
+          ${registro.objeto || 'N/A'}
+        </div>
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300 text-center">
+        ${registro.total_itens || 0}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300 text-center">
+        ${registro.total_anexos || 0}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300 text-center">
+        ${registro.total_historico || 0}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
         ${registro.item_numero ? 
           `<button onclick="mostrarModalItens('${registro.id_pncp}')" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500 text-white hover:bg-green-600 transition-colors cursor-pointer">
             Item ${registro.item_numero}
@@ -1082,7 +1098,7 @@ function renderizarTabelaFinal() {
           '<span class="text-gray-500 text-xs">-</span>'
         }
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
+      <td class="px-3 py-2 text-xs text-gray-300">
         ${registro.anexo_nome ? 
           `<button onclick="mostrarModalAnexos('${registro.id_pncp}')" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors cursor-pointer">
             Anexo
@@ -1090,7 +1106,7 @@ function renderizarTabelaFinal() {
           '<span class="text-gray-500 text-xs">-</span>'
         }
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
+      <td class="px-3 py-2 text-xs text-gray-300">
         ${registro.historico_evento ? 
           `<button onclick="mostrarModalHistorico('${registro.id_pncp}')" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-500 text-white hover:bg-purple-600 transition-colors cursor-pointer">
             Histórico
@@ -1098,8 +1114,14 @@ function renderizarTabelaFinal() {
           '<span class="text-gray-500 text-xs">-</span>'
         }
       </td>
-      <td class="px-4 py-3 text-sm text-gray-300">
+      <td class="px-3 py-2 text-xs text-gray-300">
         ${registro.data_extracao ? formatDate(registro.data_extracao) : 'N/A'}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300">
+        ${registro.metodo_extracao || 'N/A'}
+      </td>
+      <td class="px-3 py-2 text-xs text-gray-300 text-center">
+        ${registro.tempo_extracao || '0'}
       </td>
     </tr>
   `).join('');
@@ -1173,34 +1195,6 @@ function ordenarTabelaFinal(campo) {
   carregarTabelaFinal();
 }
 
-// Popular tabela final
-async function popularTabelaFinal() {
-  if (!confirm('Deseja popular a tabela final com os dados estruturados? Isso pode demorar alguns minutos.')) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/api/popular-tabela-final`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const result = await response.json();
-
-    if (result.sucesso) {
-      alert(`Tabela final populada com sucesso! ${result.total_registros} registros criados.`);
-      carregarTabelaFinal();
-      carregarResumoTabelaFinal();
-    } else {
-      alert('Erro ao popular tabela final: ' + result.erro);
-    }
-  } catch (error) {
-    alert('Erro ao popular tabela final: ' + error.message);
-  }
-}
-
 // Exportar tabela final
 function exportarTabelaFinal(formato) {
   const url = `${API_URL}/api/editais-final?formato=${formato}&limite=10000`;
@@ -1214,17 +1208,12 @@ function exportarTabelaFinal(formato) {
 // Mostrar modal de itens
 async function mostrarModalItens(idPncp) {
   try {
-    // Buscar dados completos do edital diretamente da tabela
-    const response = await fetch(`${API_URL}/api/editais-estruturados?limite=1000`);
+    // Buscar dados completos do edital
+    const response = await fetch(`${API_URL}/api/edital/${idPncp}`);
     const result = await response.json();
     
-    if (result.sucesso && result.data.length > 0) {
-      // Encontrar o edital específico pelo id_pncp
-      const edital = result.data.find(e => e.id_pncp === idPncp);
-      if (!edital) {
-        mostrarModal('Erro', '<p class="text-red-400">Edital não encontrado</p>');
-        return;
-      }
+    if (result.sucesso && result.data) {
+      const edital = result.data;
       const itens = edital.itens || [];
       
       // Criar conteúdo do modal
@@ -1272,16 +1261,11 @@ async function mostrarModalItens(idPncp) {
 // Mostrar modal de anexos
 async function mostrarModalAnexos(idPncp) {
   try {
-    const response = await fetch(`${API_URL}/api/editais-estruturados?limite=1000`);
+    const response = await fetch(`${API_URL}/api/edital/${idPncp}`);
     const result = await response.json();
     
-    if (result.sucesso && result.data.length > 0) {
-      // Encontrar o edital específico pelo id_pncp
-      const edital = result.data.find(e => e.id_pncp === idPncp);
-      if (!edital) {
-        mostrarModal('Erro', '<p class="text-red-400">Edital não encontrado</p>');
-        return;
-      }
+    if (result.sucesso && result.data) {
+      const edital = result.data;
       const anexos = edital.anexos || [];
       
       let conteudoAnexos = '';
@@ -1322,16 +1306,11 @@ async function mostrarModalAnexos(idPncp) {
 // Mostrar modal de histórico
 async function mostrarModalHistorico(idPncp) {
   try {
-    const response = await fetch(`${API_URL}/api/editais-estruturados?limite=1000`);
+    const response = await fetch(`${API_URL}/api/edital/${idPncp}`);
     const result = await response.json();
     
-    if (result.sucesso && result.data.length > 0) {
-      // Encontrar o edital específico pelo id_pncp
-      const edital = result.data.find(e => e.id_pncp === idPncp);
-      if (!edital) {
-        mostrarModal('Erro', '<p class="text-red-400">Edital não encontrado</p>');
-        return;
-      }
+    if (result.sucesso && result.data) {
+      const edital = result.data;
       const historico = edital.historico || [];
       
       let conteudoHistorico = '';
@@ -1416,7 +1395,6 @@ function fecharModal() {
 // Atualizar tabela final
 function atualizarTabelaFinal() {
   carregarTabelaFinal();
-  carregarResumoTabelaFinal();
 }
 
 // Inicializar quando a página carregar

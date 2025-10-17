@@ -70,9 +70,9 @@ class ScraperEstruturaReal {
         }
         this.pagePool = [];
 
-        await this.browser.close();
-        this.browser = null;
-        console.log('[BROWSER] Navegador fechado');
+      await this.browser.close();
+      this.browser = null;
+      console.log('[BROWSER] Navegador fechado');
       } catch (error) {
         console.error('[BROWSER] Erro ao fechar navegador:', error.message);
         this.browser = null;
@@ -473,12 +473,12 @@ class ScraperEstruturaReal {
           const texto = el.innerText?.trim();
           
           // Procurar por descrições de itens mais específicas
-          if (texto && 
+        if (texto && 
               texto.length > 5 && 
               texto.length < 200 &&
               !texto.includes('\n') &&
-              !texto.includes('Portal Nacional') &&
-              !texto.includes('Buscar no') &&
+            !texto.includes('Portal Nacional') &&
+            !texto.includes('Buscar no') &&
               !texto.includes('Exibir:') &&
               !texto.includes('Página:') &&
               !texto.includes('Voltar') &&
