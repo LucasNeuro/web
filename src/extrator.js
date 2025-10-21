@@ -21,6 +21,19 @@ class ExtratorEditais {
     return `${ano}${mes}${dia}`;
   }
 
+  obterDataInicialCompleta() {
+    // Buscar editais dos últimos 30 dias para pegar mais dados
+    const hoje = new Date();
+    const dataInicial = new Date();
+    dataInicial.setDate(hoje.getDate() - 30);
+    
+    const ano = dataInicial.getFullYear();
+    const mes = String(dataInicial.getMonth() + 1).padStart(2, '0');
+    const dia = String(dataInicial.getDate()).padStart(2, '0');
+    
+    return `${ano}${mes}${dia}`;
+  }
+
   formatarData(dataStr) {
     return `${dataStr.substring(6, 8)}/${dataStr.substring(4, 6)}/${dataStr.substring(0, 4)}`;
   }
@@ -72,6 +85,67 @@ class ExtratorEditais {
       
       try {
         const resultado = await this.buscarContratacoes(data, data, pagina);
+        
+        if (!resultado || !resultado.data || resultado.data.length === 0) {
+          console.log('[FIM] Nao ha mais registros');
+          continuar = false;
+          break;
+        }
+        
+        const editais = resultado.data.map(item => ({
+          url: this.gerarUrlEdital(
+            item.orgaoEntidade.cnpj,
+            item.anoCompra,
+            item.sequencialCompra
+          ),
+          cnpj: item.orgaoEntidade.cnpj,
+          razao_social: item.orgaoEntidade.razaoSocial,
+          data_referencia: data,
+          numero_controle_pncp: `${item.orgaoEntidade.cnpj}-${item.anoCompra}-${item.sequencialCompra}`
+        }));
+        
+        todosEditais = todosEditais.concat(editais);
+        console.log(`  [OK] ${editais.length} editais encontrados (Total: ${todosEditais.length})`);
+        
+        if (resultado.data.length < this.registrosPorPagina) {
+          console.log('[FIM] Ultima pagina alcancada');
+          continuar = false;
+        } else {
+          pagina++;
+        }
+        
+      } catch (error) {
+        console.error(`  [ERRO] ${error.message}`);
+        continuar = false;
+      }
+    }
+    
+    if (todosEditais.length === 0) {
+      console.log('[AVISO] Nenhum edital encontrado');
+      return { sucesso: true, totalSalvos: 0, totalErros: 0 };
+    }
+    
+    console.log(`\n[RESULTADO] ${todosEditais.length} editais extraidos`);
+    return await this.salvarEditais(todosEditais, data);
+  }
+
+  async extrairEditaisCompleto() {
+    console.log('[INICIO] Extraindo TODOS os editais (últimos 30 dias)\n');
+    
+    const dataInicial = this.obterDataInicialCompleta();
+    const dataFinal = this.obterDiaAnterior();
+    console.log(`[PERÍODO] ${this.formatarData(dataInicial)} até ${this.formatarData(dataFinal)}`);
+    console.log(`[LIMITE] ${this.limiteRegistros} registros\n`);
+    
+    let pagina = 1;
+    let todosEditais = [];
+    let continuar = true;
+    
+    while (continuar && todosEditais.length < this.limiteRegistros) {
+      console.log(`[PAGINA ${pagina}] Buscando...`);
+      
+      try {
+        const resultado = await this.buscarContratacoes(dataInicial, dataFinal, pagina);
         
         if (!resultado || !resultado.data || resultado.data.length === 0) {
           console.log('[FIM] Nao ha mais registros');

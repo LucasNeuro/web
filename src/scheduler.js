@@ -12,7 +12,7 @@ class SchedulerPNCP {
       horaExecucao: '08:00',
       ativo: true,
       diasRetroativos: 1,
-      limiteProcessamento: 100
+      limiteProcessamento: 1000
     };
     this.cronJob = null;
   }
@@ -170,7 +170,7 @@ class SchedulerPNCP {
       // 1. Extrair URLs do dia anterior
       this.currentStep = 'Extraindo URLs do dia anterior...';
       console.log('[SCHEDULER] 📥 Passo 1: Extraindo URLs...');
-      const dadosExtracao = await extrator.extrairEditaisDiaAnterior();
+      const dadosExtracao = await extrator.extrairEditaisCompleto();
       const resultadoExtracao = await extrator.salvarSupabase(dadosExtracao);
       
       // 2. Processar editais (scraping completo)

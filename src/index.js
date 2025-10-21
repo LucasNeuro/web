@@ -107,7 +107,7 @@ app.get('/api/info', (req, res) => {
  */
 app.post('/api/extrair', async (req, res) => {
   try {
-    const dados = await extrator.extrairEditaisDiaAnterior();
+    const dados = await extrator.extrairEditaisCompleto();
     const resultado = await extrator.salvarSupabase(dados);
     
     res.json({
@@ -713,7 +713,7 @@ app.post('/api/teste-completo', async (req, res) => {
     
     // 1. Extrair URLs do dia anterior
     console.log('[TESTE] Passo 1: Extraindo URLs...');
-    const dadosExtracao = await extrator.extrairEditaisDiaAnterior();
+    const dadosExtracao = await extrator.extrairEditaisCompleto();
     
     // Se não forçar e já tiver dados, usar os existentes
     if (!forcarExtracao) {
