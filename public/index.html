@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Consulta de Editais</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f8f9fa;
+            --border-color: #dee2e6;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+
+        .filter-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .filter-section {
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .filter-section:last-child {
+            border-bottom: none;
+        }
+
+        .filter-title {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--secondary-color), #2980b9);
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn-outline-secondary {
+            border-radius: 8px;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table thead th {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 1rem 0.75rem;
+        }
+
+        .table tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+            transform: scale(1.01);
+        }
+
+        .badge {
+            font-size: 0.8rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .badge-success {
+            background-color: var(--success-color);
+        }
+
+        .badge-warning {
+            background-color: var(--warning-color);
+        }
+
+        .badge-danger {
+            background-color: var(--danger-color);
+        }
+
+        .badge-info {
+            background-color: var(--secondary-color);
+        }
+
+        .valor {
+            font-weight: 600;
+            color: var(--success-color);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner-border {
+            color: var(--secondary-color);
+        }
+
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--secondary-color);
+        }
+
+        .stats-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .pagination-info {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+        }
+
+        .modal-title {
+            font-weight: 600;
+        }
+
+        .detail-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-value {
+            color: #495057;
+        }
+
+        .items-table, .documents-table, .history-table {
+            margin-top: 1rem;
+        }
+
+        .items-table th, .documents-table th, .history-table th {
+            background-color: #f8f9fa;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .filter-section {
+                padding: 1rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.9rem;
+            }
+            
+            .btn {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-0">
+                        <i class="fas fa-search me-2"></i>
+                        Sistema de Consulta de Editais
+                    </h1>
+                    <p class="mb-0 mt-2 opacity-75">Portal de licitações e contratos públicos</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="stats-card d-inline-block">
+                        <div class="stats-number" id="totalEditais">-</div>
+                        <div class="stats-label">Total de Editais</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- Filtros -->
+        <div class="filter-card">
+            <!-- Seção 1: Busca e Status -->
+            <div class="filter-section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="filter-title">
+                            <i class="fas fa-search"></i>
+                            Palavra-chave
+                        </div>
+                        <input type="text" class="form-control" id="busca" placeholder="Digite um termo para pesquisar">
+                    </div>
+                    <div class="col-md-6">
+                        <div class="filter-title">
+                            <i class="fas fa-info-circle"></i>
+                            Status
+                        </div>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="status" id="statusTodos" value="" checked>
+                            <label class="btn btn-outline-primary" for="statusTodos">Todos</label>
+                            
+                            <input type="radio" class="btn-check" name="status" id="statusAberta" value="Aberta">
+                            <label class="btn btn-outline-primary" for="statusAberta">Aberta</label>
+                            
+                            <input type="radio" class="btn-check" name="status" id="statusEncerrada" value="Encerrada">
+                            <label class="btn btn-outline-primary" for="statusEncerrada">Encerrada</label>
+                            
+                            <input type="radio" class="btn-check" name="status" id="statusJulgamento" value="Em Julgamento">
+                            <label class="btn btn-outline-primary" for="statusJulgamento">Em Julgamento</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção 2: Filtros Principais -->
+            <div class="filter-section">
+                <div class="filter-title">
+                    <i class="fas fa-filter"></i>
+                    FILTROS
+                    <i class="fas fa-info-circle text-primary ms-2" data-bs-toggle="tooltip" title="Use os filtros para refinar sua busca"></i>
+                </div>
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Modalidade</label>
+                        <select class="form-select" id="modalidade">
+                            <option value="">Selecione</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">UF</label>
+                        <select class="form-select" id="uf">
+                            <option value="">Selecione</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Município</label>
+                        <select class="form-select" id="municipio">
+                            <option value="">Selecione</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Órgão</label>
+                        <select class="form-select" id="orgao">
+                            <option value="">Selecione</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção 3: Filtros Avançados -->
+            <div class="filter-section">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Data Início</label>
+                        <input type="date" class="form-control" id="dataInicio">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Data Fim</label>
+                        <input type="date" class="form-control" id="dataFim">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Valor Mínimo</label>
+                        <input type="number" class="form-control" id="valorMin" placeholder="R$ 0,00">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Valor Máximo</label>
+                        <input type="number" class="form-control" id="valorMax" placeholder="R$ 0,00">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção 4: Botões de Ação -->
+            <div class="filter-section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <button type="button" class="btn btn-outline-secondary" id="limparFiltros">
+                            <i class="fas fa-eraser me-2"></i>Limpar
+                        </button>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button type="button" class="btn btn-primary" id="pesquisar">
+                            <i class="fas fa-search me-2"></i>Pesquisar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+            <p class="mt-2">Carregando editais...</p>
+        </div>
+
+        <!-- Tabela de Resultados -->
+        <div class="table-container" id="tabelaContainer" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-hover" id="tabelaEditais">
+                    <thead>
+                        <tr>
+                            <th>Nº Controle</th>
+                            <th>Órgão</th>
+                            <th>Município/UF</th>
+                            <th>Objeto</th>
+                            <th>Modalidade</th>
+                            <th>Status</th>
+                            <th>Valor Estimado</th>
+                            <th>Data Publicação</th>
+                            <th>Itens</th>
+                            <th>Docs</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaBody">
+                        <!-- Dados carregados via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Paginação -->
+            <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                <div class="pagination-info" id="paginacaoInfo">
+                    Mostrando 0 de 0 registros
+                </div>
+                <nav>
+                    <ul class="pagination mb-0" id="paginacao">
+                        <!-- Paginação gerada via JavaScript -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Detalhes -->
+    <div class="modal fade" id="modalDetalhes" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-alt me-2"></i>
+                        Detalhes do Edital
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Conteúdo carregado via JavaScript -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

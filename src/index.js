@@ -26,8 +26,16 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Rota principal - API Info
+// Servir arquivos estáticos do frontend
+app.use(express.static('public'));
+
+// Rota para o frontend
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Rota da API Info
+app.get('/api', (req, res) => {
   res.json({
     mensagem: 'PNCP API Client',
     versao: '2.0.0',
@@ -47,7 +55,8 @@ app.get('/', (req, res) => {
         estatisticas: 'GET /api/estatisticas - Estatísticas gerais'
       }
     },
-    documentacao: 'http://localhost:10000/api-docs'
+    documentacao: 'http://localhost:10000/api-docs',
+    frontend: 'http://localhost:10000/'
   });
 });
 

@@ -44,7 +44,7 @@ class ExtratorAPI {
   // Função para buscar editais de um período com paginação completa (todas as modalidades)
   async buscarEditaisData(dataInicial, dataFinal = null, limite = null) {
     const dataFinalUsar = dataFinal || dataInicial;
-    console.log(`🔍 Buscando editais do período: ${dataInicial} até ${dataFinalUsar} (TODAS AS MODALIDADES)`);
+    console.log(`Buscando editais do período: ${dataInicial} até ${dataFinalUsar} (TODAS AS MODALIDADES)`);
     
     const url = `${this.apiConsulta}/contratacoes/publicacao`;
     const tamanhoPagina = 50; // Máximo permitido pela API
