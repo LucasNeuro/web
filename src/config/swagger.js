@@ -4,9 +4,9 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'PNCP API Client',
-      version: '1.0.0',
-      description: 'API para consulta de dados do Portal Nacional de Contratacoes Publicas (PNCP)',
+      title: 'PNCP API Client - Simplificado',
+      version: '2.0.0',
+      description: 'API simplificada para extração de dados do Portal Nacional de Contratações Públicas (PNCP)',
       contact: {
         name: 'Suporte PNCP',
         url: 'https://www.gov.br/pncp',
@@ -19,183 +19,149 @@ const options = {
     },
     servers: [
       {
-        url: process.env.NODE_ENV === 'production' 
-          ? 'https://web-kpbm.onrender.com'
-          : 'http://localhost:3000',
-        description: process.env.NODE_ENV === 'production' 
-          ? 'Servidor de Produção (Render)'
-          : 'Servidor de Desenvolvimento'
+        url: 'http://localhost:10000',
+        description: 'Servidor de desenvolvimento'
       }
     ],
     tags: [
       {
-        name: 'Sistema',
-        description: 'Informacoes do sistema'
-      },
-      {
-        name: 'Extrator',
-        description: 'Extracao de editais do PNCP'
-      },
-      {
-        name: 'Scraper',
-        description: 'Scraping completo de editais (navegacao, itens, anexos, historico)'
+        name: 'Extração',
+        description: 'Endpoints para extração de editais'
       },
       {
         name: 'Scheduler',
-        description: 'Automatizacao e agendamento de execucoes'
+        description: 'Endpoints para configuração do agendador automático'
+      },
+      {
+        name: 'Sistema',
+        description: 'Endpoints para monitoramento do sistema'
       }
     ],
     components: {
       schemas: {
-        Error: {
+        RespostaExtracao: {
           type: 'object',
           properties: {
-            error: {
+            status: {
               type: 'string',
-              description: 'Mensagem de erro'
-            }
-          }
-        },
-        Orgao: {
-          type: 'object',
-          properties: {
-            cnpj: {
-              type: 'string',
-              description: 'CNPJ do orgao'
+              example: 'iniciado'
             },
-            razaoSocial: {
+            mensagem: {
               type: 'string',
-              description: 'Razao social do orgao'
+              example: 'Extração iniciada em background para 15 dias'
             },
-            esfera: {
-              type: 'string',
-              description: 'Esfera do orgao (Federal, Estadual, Municipal)'
-            }
-          }
-        },
-        Contratacao: {
-          type: 'object',
-          properties: {
-            numeroControlePNCP: {
-              type: 'string',
-              description: 'Numero de controle no PNCP'
-            },
-            sequencialContratacao: {
-              type: 'integer',
-              description: 'Numero sequencial da contratacao'
-            },
-            objeto: {
-              type: 'string',
-              description: 'Objeto da contratacao'
-            },
-            modalidade: {
-              type: 'string',
-              description: 'Modalidade de contratacao'
-            },
-            situacao: {
-              type: 'string',
-              description: 'Situacao atual da contratacao'
-            },
-            valorEstimado: {
+            dias: {
               type: 'number',
-              format: 'double',
-              description: 'Valor estimado da contratacao'
+              example: 1
             },
-            dataPublicacao: {
+            limite: {
+              type: 'number',
+              example: 5600
+            },
+            modo: {
               type: 'string',
-              format: 'date',
-              description: 'Data de publicacao'
+              example: 'historico',
+              enum: ['historico', 'scheduler']
             }
           }
         },
-        Contrato: {
+        StatusScheduler: {
           type: 'object',
           properties: {
-            numeroContrato: {
-              type: 'string',
-              description: 'Numero do contrato'
+            ativo: {
+              type: 'boolean',
+              example: true
             },
-            objeto: {
+            horaExecucao: {
               type: 'string',
-              description: 'Objeto do contrato'
+              example: '22:30'
             },
-            valor: {
+            proximaExecucao: {
+              type: 'string',
+              format: 'date-time',
+              example: '2025-10-23T22:30:00Z'
+            },
+            ultimaExecucao: {
+              type: 'string',
+              format: 'date-time',
+              example: '2025-10-22T22:30:00Z'
+            },
+            diasRetroativos: {
               type: 'number',
-              format: 'double',
-              description: 'Valor do contrato'
+              example: 1
             },
-            dataAssinatura: {
-              type: 'string',
-              format: 'date',
-              description: 'Data de assinatura'
+            limiteProcessamento: {
+              type: 'number',
+              example: 5600
             },
-            dataVigenciaInicio: {
+            modalidades: {
               type: 'string',
-              format: 'date',
-              description: 'Data de inicio da vigencia'
+              example: 'TODAS'
             },
-            dataVigenciaFim: {
+            mensagem: {
               type: 'string',
-              format: 'date',
-              description: 'Data de fim da vigencia'
+              example: 'Scheduler configurado para extrair editais do dia anterior automaticamente'
             }
           }
-        }
-      },
-      parameters: {
-        cnpjParam: {
-          name: 'cnpj',
-          in: 'path',
-          required: true,
-          schema: {
-            type: 'string',
-            pattern: '^[0-9]{14}$'
-          },
-          description: 'CNPJ do orgao (14 digitos)',
-          example: '00394460005887'
         },
-        anoParam: {
-          name: 'ano',
-          in: 'path',
-          required: true,
-          schema: {
-            type: 'integer',
-            minimum: 2000,
-            maximum: 2100
-          },
-          description: 'Ano da consulta',
-          example: 2024
+        StatusSistema: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              example: 'ok'
+            },
+            timestamp: {
+              type: 'string',
+              format: 'date-time',
+              example: '2025-10-22T21:30:00Z'
+            },
+            versao: {
+              type: 'string',
+              example: '2.0.0'
+            },
+            funcionalidades: {
+              type: 'object',
+              properties: {
+                apiPNCP: {
+                  type: 'boolean',
+                  example: true
+                },
+                bancoDados: {
+                  type: 'boolean',
+                  example: true
+                },
+                scheduler: {
+                  type: 'boolean',
+                  example: true
+                }
+              }
+            },
+            mensagem: {
+              type: 'string',
+              example: 'Sistema funcionando corretamente'
+            }
+          }
         },
-        paginaQuery: {
-          name: 'pagina',
-          in: 'query',
-          required: false,
-          schema: {
-            type: 'integer',
-            minimum: 1,
-            default: 1
-          },
-          description: 'Numero da pagina'
-        },
-        tamanhoPaginaQuery: {
-          name: 'tamanhoPagina',
-          in: 'query',
-          required: false,
-          schema: {
-            type: 'integer',
-            minimum: 1,
-            maximum: 500,
-            default: 10
-          },
-          description: 'Quantidade de registros por pagina'
+        Erro: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              example: 'erro'
+            },
+            mensagem: {
+              type: 'string',
+              example: 'Descrição do erro'
+            }
+          }
         }
       }
     }
   },
-  apis: ['./src/index.js', './src/routes/*.js']
+  apis: ['./src/index.js']
 };
 
-const swaggerSpec = swaggerJsdoc(options);
+const specs = swaggerJsdoc(options);
 
-module.exports = swaggerSpec;
-
+module.exports = specs;

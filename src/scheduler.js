@@ -1,6 +1,5 @@
-// Scheduler simples sem dependências externas
-const extrator = require('./extrator');
-const processador = require('./processar');
+// Scheduler simplificado usando apenas APIs
+const extratorAPI = require('./extrator-api');
 const supabase = require('./config/supabase');
 
 class SchedulerPNCP {
@@ -9,10 +8,11 @@ class SchedulerPNCP {
     this.currentExecution = null;
     this.currentStep = '';
     this.config = {
-      horaExecucao: '08:00',
+      horaExecucao: '22:30',
       ativo: true,
       diasRetroativos: 1,
-      limiteProcessamento: 1000
+      limiteProcessamento: 5600,
+      modalidades: 'TODAS' // Busca todas as modalidades
     };
     this.cronJob = null;
   }
@@ -167,34 +167,31 @@ class SchedulerPNCP {
 
       console.log('[SCHEDULER] 🚀 Iniciando processo completo...');
       
-      // 1. Extrair URLs do dia anterior
-      this.currentStep = 'Extraindo URLs do dia anterior...';
-      console.log('[SCHEDULER] 📥 Passo 1: Extraindo URLs...');
-      const dadosExtracao = await extrator.extrairEditaisCompleto();
-      const resultadoExtracao = await extrator.salvarSupabase(dadosExtracao);
-      
-      // 2. Processar editais (scraping completo)
-      this.currentStep = 'Processando editais (scraping completo)...';
-      console.log('[SCHEDULER] 🔍 Passo 2: Processando editais...');
-      const resultadoProcessamento = await processador.processarEditaisRefinado(this.config.limiteProcessamento);
+      // 1. Extrair editais via API (sem scraping)
+      this.currentStep = 'Extraindo editais via API...';
+      console.log('[SCHEDULER] 📥 Passo 1: Extraindo editais via API...');
+      const resultadoExtracao = await extratorAPI.extrairEditaisCompleto({
+        diasRetroativos: 1, // Scheduler sempre busca apenas 1 dia (ontem)
+        limite: this.config.limiteProcessamento
+      });
       
       const fimExecucao = Date.now();
       const tempoExecucao = ((fimExecucao - inicioExecucao) / 1000).toFixed(2);
       
-      // 3. Finalizar registro de execução
+      // 2. Finalizar registro de execução
       await this.finalizarRegistroExecucao(execucaoId, {
         status: 'concluido',
         tempo_execucao: parseFloat(tempoExecucao),
-        total_encontrados: dadosExtracao.totalEditais,
-        total_novos: resultadoExtracao.totalSalvos,
-        total_erros: resultadoExtracao.totalErros + (resultadoProcessamento.totalErros || 0),
+        total_encontrados: resultadoExtracao.totalEncontrados,
+        total_novos: resultadoExtracao.totalNovos,
+        total_atualizados: resultadoExtracao.totalAtualizados,
+        total_erros: resultadoExtracao.totalErros,
         detalhes: {
-          extracao: resultadoExtracao,
-          processamento: resultadoProcessamento
+          extracao: resultadoExtracao
         }
       });
 
-      // 4. Atualizar última execução
+      // 3. Atualizar última execução
       await this.atualizarUltimaExecucao();
       
       this.currentStep = 'Processo concluído';
@@ -203,9 +200,10 @@ class SchedulerPNCP {
       return {
         status: 'concluido',
         tempo_execucao: parseFloat(tempoExecucao),
-        total_encontrados: dadosExtracao.totalEditais,
-        total_novos: resultadoExtracao.totalSalvos,
-        total_erros: resultadoExtracao.totalErros + (resultadoProcessamento.totalErros || 0)
+        total_encontrados: resultadoExtracao.totalEncontrados,
+        total_novos: resultadoExtracao.totalNovos,
+        total_atualizados: resultadoExtracao.totalAtualizados,
+        total_erros: resultadoExtracao.totalErros
       };
 
     } catch (error) {
@@ -360,6 +358,66 @@ class SchedulerPNCP {
       this.timeoutId = null;
     }
     console.log('[SCHEDULER] Scheduler parado');
+  }
+
+  async obterStatus() {
+    return {
+      ativo: this.config.ativo,
+      horaExecucao: this.config.horaExecucao,
+      proximaExecucao: this.calcularProximaExecucao(),
+      ultimaExecucao: this.ultimaExecucao,
+      diasRetroativos: this.config.diasRetroativos,
+      limiteProcessamento: this.config.limiteProcessamento,
+      modalidades: this.config.modalidades
+    };
+  }
+
+  async configurarHorario(novaHora) {
+    this.config.horaExecucao = novaHora;
+    
+    // Salvar no banco
+    try {
+      const { error } = await supabase
+        .from('scheduler_horario')
+        .upsert({
+          id: 1,
+          hora_execucao: novaHora,
+          ativo: this.config.ativo,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('[SCHEDULER] Erro ao salvar configuração:', error);
+        throw error;
+      }
+
+      // Reconfigurar execução automática
+      if (this.config.ativo) {
+        this.configurarExecucaoAutomatica();
+      }
+
+      console.log(`[SCHEDULER] Horário configurado para ${novaHora}`);
+    } catch (error) {
+      console.error('[SCHEDULER] Erro ao configurar horário:', error);
+      throw error;
+    }
+  }
+
+  calcularProximaExecucao() {
+    if (!this.config.ativo) return null;
+    
+    const agora = new Date();
+    const [hora, minuto] = this.config.horaExecucao.split(':');
+    
+    const proximaExecucao = new Date();
+    proximaExecucao.setHours(parseInt(hora), parseInt(minuto), 0, 0);
+    
+    // Se já passou hoje, agendar para amanhã
+    if (proximaExecucao <= agora) {
+      proximaExecucao.setDate(proximaExecucao.getDate() + 1);
+    }
+    
+    return proximaExecucao.toISOString();
   }
 }
 

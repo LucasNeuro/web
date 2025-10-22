@@ -1,187 +1,125 @@
-# 🚀 PNCP API - Extrator de Editais
+# 🚀 PNCP API Extrator - Sistema Refatorado
 
-Sistema automatizado para extração e processamento de editais do Portal Nacional de Contratações Públicas (PNCP).
+## 📋 Descrição
 
-## 📋 Funcionalidades
+Sistema automatizado para extração de editais do Portal Nacional de Contratações Públicas (PNCP) via API, com scheduler diário e armazenamento em banco de dados.
 
-- ✅ **Extração Automática**: Extrai editais do PNCP do dia anterior
-- ✅ **Scraping Completo**: Navega e extrai dados detalhados (itens, anexos, histórico)
-- ✅ **Scheduler Automático**: Execução diária programada
-- ✅ **Anti-Duplicação**: Controle inteligente de duplicatas
-- ✅ **API REST**: Endpoints completos para todas as operações
-- ✅ **Documentação Swagger**: Interface interativa para testes
+## ✨ Características
 
-## 🛠️ Tecnologias
+- **🔌 100% API-driven** - Sem web scraping
+- **⏰ Scheduler automático** - Execução diária às 22:30
+- **📊 Múltiplas modalidades** - Busca em todas as modalidades disponíveis
+- **🎯 Limite controlado** - Até 5.600 editais por execução
+- **💾 Armazenamento otimizado** - PostgreSQL com Supabase
+- **📚 Documentação Swagger** - API totalmente documentada
 
-- **Node.js** + **Express**
-- **Puppeteer** (Web Scraping)
-- **Cheerio** (HTML Parsing)
-- **Supabase** (PostgreSQL)
-- **Swagger** (Documentação)
+## 🏗️ Arquitetura
 
-## 📦 Instalação Local
-
-```bash
-# Instalar dependências
-npm install
-
-# Configurar variáveis de ambiente
-cp .env.example .env
-# Editar .env com suas credenciais
-
-# Rodar em desenvolvimento
-npm run dev
-
-# Rodar em produção
-npm start
+### **📁 Estrutura do Projeto**
+```
+src/
+├── config/
+│   ├── supabase.js    # Configuração do banco
+│   └── swagger.js     # Documentação da API
+├── extrator-api.js    # Lógica de extração via API
+├── index.js          # Servidor Express e endpoints
+└── scheduler.js      # Gerenciador de execuções automáticas
 ```
 
-## 🔧 Variáveis de Ambiente
-
-```env
-PORT=3000
-PNCP_API_BASE_URL=https://pncp.gov.br/api
-SUPABASE_URL=sua_url_supabase
-SUPABASE_ANON_KEY=sua_chave_supabase
-```
+### **🔌 Endpoints da API**
+- `POST /api/extrair` - Iniciar extração manual
+- `GET /api/scheduler` - Status do scheduler
+- `GET /api/health` - Health check
+- `GET /api/docs` - Documentação Swagger
 
 ## 🚀 Deploy no Render
 
-### Passo 1: Criar conta no Render
-1. Acesse [render.com](https://render.com)
-2. Crie uma conta gratuita
+### **📋 Pré-requisitos**
+1. Conta no Render
+2. Projeto no Supabase configurado
+3. Variáveis de ambiente configuradas
 
-### Passo 2: Conectar Repositório
-1. Faça push do código para GitHub/GitLab
-2. No Render, clique em "New +"
-3. Selecione "Web Service"
-4. Conecte seu repositório
+### **🔧 Variáveis de Ambiente**
+```bash
+SUPABASE_URL=sua_url_do_supabase
+SUPABASE_ANON_KEY=sua_chave_anonima_do_supabase
+PNCP_API_BASE_URL=https://pncp.gov.br/api
+NODE_ENV=production
+PORT=10000
+NODE_OPTIONS=--max-old-space-size=256
+```
 
-### Passo 3: Configurar Variáveis
-No painel do Render, adicione:
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+### **📦 Deploy**
+1. **Fazer push** do código para o repositório
+2. **Conectar** o repositório no Render
+3. **Configurar** as variáveis de ambiente
+4. **Deploy automático** via `render.yaml`
 
-### Passo 4: Deploy
-O Render detectará automaticamente o `render.yaml` e fará o deploy!
+## ⚙️ Configuração
 
-## 📚 API Endpoints
+### **⏰ Scheduler**
+- **Horário:** 22:30 (configurável)
+- **Frequência:** Diária
+- **Modalidades:** Todas (7 modalidades)
+- **Limite:** 5.600 editais
 
-### Extração
-- `POST /api/extrair` - Extrai editais do dia anterior
-- `GET /api/extrair/status` - Status da extração
-
-### Processamento (Scraping)
-- `POST /api/processar` - Processa editais pendentes
-- `POST /api/processar-url` - Processa URL específica
-- `GET /api/processar/status` - Status do processamento
-
-### Scheduler (Automação)
-- `POST /api/scheduler/executar` - Executa processo completo
-- `POST /api/scheduler/configurar` - Configura horário e parâmetros
-- `GET /api/scheduler/status` - Status do scheduler
-- `GET /api/scheduler/historico` - Histórico de execuções
-
-### Documentação
-- `/api-docs` - Interface Swagger interativa
-- `/swagger.json` - Especificação OpenAPI
+### **📊 Modalidades Suportadas**
+1. Concorrência
+2. Concurso
+3. Leilão
+4. Pregão Presencial
+5. Pregão Eletrônico
+6. Dispensa
+7. Inexigibilidade
 
 ## 🧪 Testes
 
+### **🔍 Testar Extração**
 ```bash
-# Teste de uma URL específica (scraping detalhado)
-npm run teste-url
-
-# Teste completo com Supabase
-npm run teste
-
-# Teste sem Supabase
-npm run teste-simples
-
-# Teste do scheduler
-npm run teste-scheduler
-
-# Extração manual
-npm run extrair
+curl -X POST https://sua-api.onrender.com/api/extrair \
+  -H "Content-Type: application/json" \
+  -d '{"dias": 1, "limite": 5600}'
 ```
 
-### 🎯 Teste de URL Específica
-Para testar o scraping detalhado de um edital:
-1. Edite `src/teste-url-especifica.js` e altere a constante `URL_TESTE`
-2. Execute: `npm run teste-url`
-3. Veja o [Guia Completo](./TESTE-SCRAPING.md)
-
-## 📊 Estrutura do Banco
-
-### editais_pncp
-Armazena URLs básicas dos editais extraídos da API
-
-### editais_estruturados
-Armazena dados completos extraídos via scraping (JSONB)
-
-### scheduler_horario
-Configuração do scheduler automático
-
-### scheduler_execucoes
-Histórico de execuções automáticas
-
-## 🔄 Fluxo Automático
-
-```
-1. ⏰ SCHEDULER (08:00 diário)
-   ├── Extrai URLs do dia anterior
-   ├── Processa editais (scraping)
-   ├── Salva dados estruturados
-   └── Registra execução
-
-2. 🛡️ ANTI-DUPLICAÇÃO
-   ├── numero_controle_pncp (UNIQUE)
-   ├── id_pncp (UNIQUE)
-   └── UPSERT automático
-
-3. 📈 MONITORAMENTO
-   ├── Status em tempo real
-   ├── Histórico completo
-   └── Métricas detalhadas
-```
-
-## 📝 Scripts
-
-- `npm start` - Inicia servidor em produção
-- `npm run dev` - Desenvolvimento com nodemon
-- `npm run extrair` - Extração manual
-- `npm run teste` - Teste completo
-- `npm run teste-simples` - Teste simples
-- `npm run teste-scheduler` - Teste scheduler
-
-## 🐛 Troubleshooting
-
-### Erro no Puppeteer (Render)
-O Render instala automaticamente Chromium. Se houver erro:
+### **📊 Verificar Status**
 ```bash
-# Já configurado no render.yaml
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+curl https://sua-api.onrender.com/api/scheduler
 ```
 
-### Timeout no Scraping
-Ajuste o timeout no `src/scraper.js`:
-```javascript
-await page.goto(url, { 
-  waitUntil: 'networkidle2', 
-  timeout: 120000 
-});
+## 📈 Monitoramento
+
+### **📊 Logs**
+- Execuções do scheduler
+- Extrações por modalidade
+- Erros e retry attempts
+- Performance metrics
+
+### **💾 Banco de Dados**
+- `editais_completos` - Dados dos editais
+- `scheduler_execucoes` - Histórico de execuções
+- `scheduler_horario` - Configurações do scheduler
+
+## 🔧 Desenvolvimento
+
+### **🚀 Executar Localmente**
+```bash
+npm install
+npm start
 ```
 
-## 📄 Licença
+### **📚 Documentação**
+Acesse `/api/docs` para ver a documentação completa da API.
 
-MIT
+## 📝 Changelog
 
-## 👨‍💻 Autor
+### **v2.0.0 - Sistema Refatorado**
+- ✅ Removido web scraping (Puppeteer)
+- ✅ Implementado sistema 100% API
+- ✅ Adicionado suporte a múltiplas modalidades
+- ✅ Otimizado scheduler para execução diária
+- ✅ Simplificado arquitetura do sistema
+- ✅ Melhorado sistema de logs e monitoramento
 
-Elmar Tecnologia
+## 🤝 Suporte
 
----
-
-**Sistema 100% automatizado para extração de editais do PNCP!** 🎊
-
+Para dúvidas ou problemas, consulte a documentação da API em `/api/docs` ou verifique os logs do sistema.
