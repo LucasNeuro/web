@@ -27,10 +27,20 @@ src/
 ```
 
 ### **🔌 Endpoints da API**
+
+#### **Extração e Sistema**
 - `POST /api/extrair` - Iniciar extração manual
 - `GET /api/scheduler` - Status do scheduler
 - `GET /api/health` - Health check
 - `GET /api/docs` - Documentação Swagger
+
+#### **Frontend - Dados Estruturados**
+- `GET /api/editais` - Listar editais com filtros avançados
+- `GET /api/editais/:numeroControle` - Detalhes completos de um edital
+- `GET /api/editais/:numeroControle/itens` - Itens desestruturados
+- `GET /api/editais/:numeroControle/documentos` - Documentos desestruturados
+- `GET /api/editais/:numeroControle/historico` - Histórico desestruturado
+- `GET /api/estatisticas` - Estatísticas gerais
 
 ## 🚀 Deploy no Render
 
