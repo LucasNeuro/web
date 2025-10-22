@@ -153,19 +153,21 @@ class SistemaConsultaEditais {
         
         tr.innerHTML = `
             <td>
-                <small class="text-muted">${edital.numero_controle_pncp}</small>
+                <div class="fw-bold text-primary">${edital.numero_controle_pncp}</div>
             </td>
             <td>
-                <div class="fw-bold">${this.truncarTexto(edital.razao_social, 30)}</div>
-                <small class="text-muted">${edital.cnpj_orgao}</small>
+                <div class="fw-bold">${this.truncarTexto(edital.razao_social, 40)}</div>
             </td>
             <td>
-                <div>${edital.municipio || '-'}</div>
+                <small class="text-muted">${edital.cnpj_orgao || '-'}</small>
+            </td>
+            <td>
+                <div class="fw-bold">${edital.municipio || '-'}</div>
                 <span class="badge bg-secondary">${edital.uf || '-'}</span>
             </td>
             <td>
-                <div class="text-truncate" style="max-width: 200px;" title="${edital.objeto || '-'}">
-                    ${edital.objeto || '-'}
+                <div title="${edital.objeto || '-'}">
+                    ${this.truncarTexto(edital.objeto, 50)}
                 </div>
             </td>
             <td>
@@ -175,11 +177,22 @@ class SistemaConsultaEditais {
                 ${this.criarBadgeStatus(edital.situacao)}
             </td>
             <td>
-                <div class="valor">${this.formatarValor(edital.valor_estimado)}</div>
+                <div class="valor fw-bold">${this.formatarValor(edital.valor_estimado)}</div>
             </td>
             <td>
-                <div>${this.formatarData(edital.data_publicacao)}</div>
+                <div class="valor fw-bold">${this.formatarValor(edital.valor_homologado)}</div>
+            </td>
+            <td>
+                <div class="fw-bold">${this.formatarData(edital.data_publicacao)}</div>
                 <small class="text-muted">${this.formatarHora(edital.data_publicacao)}</small>
+            </td>
+            <td>
+                <div>${this.formatarData(edital.data_abertura)}</div>
+                <small class="text-muted">${this.formatarHora(edital.data_abertura)}</small>
+            </td>
+            <td>
+                <div>${this.formatarData(edital.data_encerramento)}</div>
+                <small class="text-muted">${this.formatarHora(edital.data_encerramento)}</small>
             </td>
             <td>
                 <span class="badge bg-primary">${edital.total_itens || 0}</span>
@@ -188,9 +201,17 @@ class SistemaConsultaEditais {
                 <span class="badge bg-warning">${edital.total_documentos || 0}</span>
             </td>
             <td>
-                <button class="btn btn-sm btn-outline-primary" onclick="sistemaConsulta.verDetalhes('${edital.numero_controle_pncp}')">
-                    <i class="fas fa-eye"></i>
-                </button>
+                <span class="badge bg-info">${edital.total_eventos_historico || 0}</span>
+            </td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="sistemaConsulta.verDetalhes('${edital.numero_controle_pncp}')" title="Ver Detalhes">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="sistemaConsulta.verItens('${edital.numero_controle_pncp}')" title="Ver Itens">
+                        <i class="fas fa-list"></i>
+                    </button>
+                </div>
             </td>
         `;
         
@@ -338,6 +359,22 @@ class SistemaConsultaEditais {
         } catch (error) {
             console.error('❌ Erro ao carregar detalhes:', error);
             alert('Erro ao carregar detalhes: ' + error.message);
+        }
+    }
+
+    async verItens(numeroControle) {
+        try {
+            const response = await fetch(`${this.apiBase}/api/editais/${numeroControle}/itens`);
+            const data = await response.json();
+            
+            if (data.sucesso) {
+                this.mostrarModalItens(numeroControle, data.dados);
+            } else {
+                alert('Erro ao carregar itens: ' + data.mensagem);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao carregar itens:', error);
+            alert('Erro ao carregar itens: ' + error.message);
         }
     }
 
@@ -501,6 +538,65 @@ class SistemaConsultaEditais {
                     </div>
                 </div>
             </div>
+        `;
+        
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+        modal.show();
+    }
+
+    mostrarModalItens(numeroControle, itens) {
+        const modalBody = document.getElementById('modalBody');
+        
+        modalBody.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    Itens do Edital ${numeroControle}
+                </h5>
+                <span class="badge bg-primary">${itens.length} itens</span>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Item</th>
+                            <th>Descrição</th>
+                            <th>Tipo Benefício</th>
+                            <th>Quantidade</th>
+                            <th>Unidade</th>
+                            <th>Valor Unit.</th>
+                            <th>Valor Total</th>
+                            <th>Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itens.map(item => `
+                            <tr>
+                                <td><span class="badge bg-secondary">${item.numero_item || '-'}</span></td>
+                                <td>
+                                    <div title="${item.item_descricao || '-'}">
+                                        ${this.truncarTexto(item.item_descricao, 60)}
+                                    </div>
+                                </td>
+                                <td>${item.tipo_beneficio || '-'}</td>
+                                <td class="text-center">${item.quantidade || '-'}</td>
+                                <td>${item.unidade_medida || '-'}</td>
+                                <td class="valor">${this.formatarValor(item.valor_unitario)}</td>
+                                <td class="valor fw-bold">${this.formatarValor(item.valor_total)}</td>
+                                <td>
+                                    <span class="badge bg-${item.situacao_item === 'Ativa' ? 'success' : 'secondary'}">
+                                        ${item.situacao_item || '-'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            
+            ${itens.length === 0 ? '<div class="text-center text-muted py-4">Nenhum item encontrado</div>' : ''}
         `;
         
         // Mostrar modal
